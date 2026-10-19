@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from . import db
-from .migrations import apply_migrations, split_statements
+from .migrations import apply_migrations, default_collation, split_statements
 
 GRANTS_FILE = Path(__file__).resolve().parent.parent / "sql" / "grants_app.sql"
 _IDENT = re.compile(r"^[A-Za-z0-9_]{1,64}$")
@@ -37,7 +37,8 @@ def bootstrap(settings, root_user: str, root_password: str, account_host: str = 
     conn = db.connect(settings, user=root_user, password=root_password, database=None, autocommit=True)
     try:
         with conn.cursor() as cur:
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{dbname}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{dbname}` CHARACTER SET utf8mb4 "
+                        f"COLLATE {default_collation(conn)}")
             for user, pwd in ((owner, settings.db_admin_password), (app, settings.db_password)):
                 if len(pwd) < 16:
                     raise ValueError(f"La contraseña de la cuenta {user} debe tener al menos 16 caracteres")

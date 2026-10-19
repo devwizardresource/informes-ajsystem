@@ -8,12 +8,6 @@ from ajsystem import audit, db
 from conftest import create_report, fill, new_op
 
 
-@pytest.fixture()
-def app_conn(app):
-    s = app.config["AJS_SETTINGS"]
-    conn = db.connect(s, autocommit=True)  # cuenta de la aplicación, privilegios mínimos
-    yield conn
-    conn.close()
 
 
 @pytest.mark.parametrize("sql", [

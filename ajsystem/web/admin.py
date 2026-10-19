@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
 from .. import users
+from ..security.passwords import POLICY_TEXT
 from ..security.authz import require_perm
 
 bp = Blueprint("admin", __name__, url_prefix="/administracion")
@@ -12,7 +13,8 @@ bp = Blueprint("admin", __name__, url_prefix="/administracion")
 @bp.route("/usuarios")
 @require_perm("users.manage")
 def users_index():
-    return render_template("admin_users.html", users=users.list_users(), roles=users.roles(), errors={}, form={})
+    return render_template("admin_users.html", users=users.list_users(), roles=users.roles(), errors={}, form={},
+                           policy=POLICY_TEXT)
 
 
 @bp.route("/usuarios", methods=["POST"])
@@ -20,12 +22,12 @@ def users_index():
 def users_create():
     form = request.form
     try:
-        users.create_user(form.get("username"), form.get("full_name"), form.get("email"), form.get("password"),
+        users.create_user(form.get("username"), form.get("full_name"), form.get("id_number"), form.get("password"),
                           form.get("role_id"))
     except users.UserError as exc:
         flash(exc.message, "error")
-        return render_template("admin_users.html", users=users.list_users(), roles=users.roles(),
-                               errors=exc.field_errors, form={k: form.get(k, "") for k in ("username", "full_name", "email", "role_id")}), 422
+        return render_template("admin_users.html", users=users.list_users(), roles=users.roles(), policy=POLICY_TEXT,
+                               errors=exc.field_errors, form={k: form.get(k, "") for k in ("username", "full_name", "id_number", "role_id")}), 422
     flash("Usuario creado. Deberá cambiar la contraseña en su primer acceso.", "success")
     return redirect(url_for("admin.users_index"))
 
@@ -49,6 +51,13 @@ def users_role(user_id: int):
 @require_perm("users.manage")
 def users_status(user_id: int):
     return _run(users.set_active, user_id, request.form.get("activo") == "1", g.user, ok="Estado de la cuenta actualizado.")
+
+
+@bp.route("/usuarios/<int:user_id>/identificacion", methods=["POST"])
+@require_perm("users.manage")
+def users_id_number(user_id: int):
+    return _run(users.set_id_number, user_id, request.form.get("id_number", ""), g.user,
+                ok="Número de identificación actualizado.")
 
 
 @bp.route("/usuarios/<int:user_id>/contrasena", methods=["POST"])

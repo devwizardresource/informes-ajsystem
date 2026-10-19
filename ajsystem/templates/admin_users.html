@@ -7,12 +7,20 @@
   <h2>Usuarios</h2>
   <div class="table-wrap">
   <table class="table">
-    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">Rol</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
+    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">N.º identificación</th><th scope="col">Rol</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td data-label="Usuario"><code>{{ u.username }}</code></td>
-        <td data-label="Nombre">{{ u.full_name }}{% if u.email %}<br><small class="muted">{{ u.email }}</small>{% endif %}</td>
+        <td data-label="Nombre">{{ u.full_name }}</td>
+        <td data-label="N.º identificación">
+          <form method="post" action="{{ url_for('admin.users_id_number', user_id=u.id) }}" class="inline" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="sr-only" for="idn-{{ u.id }}">Identificación de {{ u.username }}</label>
+            <input id="idn-{{ u.id }}" name="id_number" value="{{ u.id_number or '' }}" maxlength="20" size="12" inputmode="numeric">
+            <button type="submit" class="btn btn-sm">Guardar</button>
+          </form>
+        </td>
         <td data-label="Rol">
           <form method="post" action="{{ url_for('admin.users_role', user_id=u.id) }}" class="inline" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -33,7 +41,8 @@
           <details class="inline-details"><summary>Restablecer contraseña</summary>
             <form method="post" action="{{ url_for('admin.users_password', user_id=u.id) }}" data-busy>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <label for="pw-{{ u.id }}">Contraseña temporal (mín. 12)</label>
+              <label for="pw-{{ u.id }}">Contraseña temporal</label>
+              <p class="help">{{ policy }}</p>
               <input id="pw-{{ u.id }}" name="password" type="password" minlength="12" autocomplete="new-password" required>
               <button type="submit" class="btn btn-sm" data-confirm="¿Restablecer la contraseña de {{ u.username }}?">Restablecer</button>
             </form>
@@ -51,15 +60,18 @@
   <h2>Crear usuario</h2>
   <form method="post" action="{{ url_for('admin.users_create') }}" class="grid-form" data-busy>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div><label for="n-username">Usuario</label><input id="n-username" name="username" required maxlength="64" value="{{ form.username or '' }}">
+    <div><label for="n-username">Usuario</label><input id="n-username" name="username" required maxlength="64" autocapitalize="none" value="{{ form.username or '' }}">
+      <p class="help">Alias, nombre completo o número de identificación.</p>
       {% if errors.username %}<p class="field-error">{{ errors.username }}</p>{% endif %}</div>
     <div><label for="n-full">Nombre completo</label><input id="n-full" name="full_name" required maxlength="120" value="{{ form.full_name or '' }}">
       {% if errors.full_name %}<p class="field-error">{{ errors.full_name }}</p>{% endif %}</div>
-    <div><label for="n-email">Correo (opcional)</label><input id="n-email" name="email" type="email" maxlength="190" value="{{ form.email or '' }}">
-      {% if errors.email %}<p class="field-error">{{ errors.email }}</p>{% endif %}</div>
+    <div><label for="n-idn">N.º de identificación</label><input id="n-idn" name="id_number" maxlength="20" inputmode="numeric" value="{{ form.id_number or '' }}">
+      <p class="help">También sirve para iniciar sesión.</p>
+      {% if errors.id_number %}<p class="field-error">{{ errors.id_number }}</p>{% endif %}</div>
     <div><label for="n-role">Rol</label><select id="n-role" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if form.role_id == r.id|string %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
       {% if errors.role_id %}<p class="field-error">{{ errors.role_id }}</p>{% endif %}</div>
-    <div><label for="n-pw">Contraseña temporal (mín. 12)</label><input id="n-pw" name="password" type="password" minlength="12" autocomplete="new-password" required>
+    <div><label for="n-pw">Contraseña temporal</label><input id="n-pw" name="password" type="password" minlength="12" autocomplete="new-password" required>
+      <p class="help">{{ policy }}</p>
       {% if errors.password %}<p class="field-error">{{ errors.password }}</p>{% endif %}</div>
     <div class="filter-actions"><button type="submit" class="btn btn-primary">Crear usuario</button></div>
   </form>

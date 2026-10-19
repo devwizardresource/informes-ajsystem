@@ -2,53 +2,104 @@
 {% from "_macros.html" import report_rows with context %}
 {% block title %}Inicio{% endblock %}
 {% block content %}
-<section class="hero">
-  <h1>Bienvenido/a, {{ current_user.full_name }}</h1>
-  <p class="muted">Perfil: {{ current_user.role_name }} · Usuario: {{ current_user.username }}</p>
-  <div class="actions">
-    {% if has_perm('report.create') %}
-    <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
-    </form>
+<div class="layout">
+  <div class="main">
+    <section class="hero">
+      <h1>Bienvenido/a, {{ current_user.full_name }}</h1>
+      <p>Perfil: {{ current_user.role_name }} · Usuario: {{ current_user.username }}</p>
+      <div class="actions">
+        {% if has_perm('report.create') %}
+        <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
+        </form>
+        {% endif %}
+        {% if has_perm('module.consolidation') %}<a class="btn btn-ghost" href="{{ url_for('consolidation.index') }}">Consolidación</a>{% endif %}
+      </div>
+    </section>
+
+    {% if summary is defined %}
+    <section>
+      <h2>Resumen de informes</h2>
+      <div class="stats">
+        {% for code, n in summary.items() %}
+        <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
+        {% endfor %}
+      </div>
+    </section>
+    <section>
+      <h2>Informes enviados recientemente</h2>
+      {{ report_rows(recent_sent, show_owner=true, date_label='Enviado', date_field='last_sent_at', empty='Todavía no se han recibido informes.') }}
+    </section>
+    <section>
+      <h2>Pendientes de revisión o en corrección</h2>
+      {{ report_rows(in_correction, show_owner=true, empty='No hay informes en corrección.') }}
+    </section>
     {% endif %}
-    {% if has_perm('module.consolidation') %}<a class="btn" href="{{ url_for('consolidation.index') }}">Consolidación de informes</a>{% endif %}
-    {% if has_perm('module.audit_log') %}<a class="btn" href="{{ url_for('logs.index') }}">Registro detallado</a>{% endif %}
-  </div>
-</section>
 
-{% if summary is defined %}
-<section>
-  <h2>Resumen de informes visibles</h2>
-  <div class="stats">
-    {% for code, n in summary.items() %}
-    <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
-    {% endfor %}
+    {% if has_perm('module.reports') %}
+    <section>
+      <h2>Mis informes en elaboración</h2>
+      {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
+    </section>
+    <section>
+      <h2>Mis informes cerrados pendientes de envío</h2>
+      {{ report_rows(closed_pending, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
+    </section>
+    <section>
+      <h2>Mis informes enviados</h2>
+      {{ report_rows(sent_own, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
+    </section>
+    {% endif %}
   </div>
-</section>
-<section>
-  <h2>Informes enviados recientemente</h2>
-  {{ report_rows(recent_sent, show_owner=true, date_label='Enviado', date_field='last_sent_at', empty='Todavía no se han recibido informes.') }}
-</section>
-<section>
-  <h2>Pendientes de revisión o en corrección</h2>
-  <p class="muted small">Informes enviados anteriormente que han sido reabiertos o cerrados y aún no reenviados.</p>
-  {{ report_rows(in_correction, show_owner=true, empty='No hay informes en corrección.') }}
-</section>
-{% endif %}
 
-{% if has_perm('module.reports') %}
-<section>
-  <h2>Mis informes en elaboración</h2>
-  {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
-</section>
-<section>
-  <h2>Mis informes cerrados pendientes de envío</h2>
-  {{ report_rows(closed_pending, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
-</section>
-<section>
-  <h2>Mis informes enviados</h2>
-  {{ report_rows(sent_own, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
-</section>
-{% endif %}
+  <aside class="aside" aria-label="Panel lateral">
+    <section class="card">
+      <h3>Accesos rápidos</h3>
+      <div class="quick">
+        {% if has_perm('module.reports') %}<a class="btn" href="{{ url_for('reports.index') }}">Mis informes e importación Excel</a>{% endif %}
+        {% if has_perm('module.consolidation') %}<a class="btn" href="{{ url_for('consolidation.index', orden='marca') }}">Equipos por marca y serie</a>{% endif %}
+        {% if has_perm('module.audit_log') %}<a class="btn" href="{{ url_for('logs.sessions') }}">Entradas y salidas de sesión</a>{% endif %}
+        {% if has_perm('users.manage') %}<a class="btn" href="{{ url_for('admin.users_index') }}">Usuarios y roles</a>{% endif %}
+        <a class="btn" href="{{ url_for('auth.change_password') }}">Cambiar mi contraseña</a>
+      </div>
+    </section>
+
+    {% if requests is defined %}
+    <section class="card">
+      <h3>Solicitudes de reapertura</h3>
+      {% if requests %}
+      <ul class="mini-list">
+        {% for q in requests %}
+        <li><a href="{{ url_for('reports.detail', report_id=q.report_id) }}"><code>{{ q.code }}</code></a> · {{ q.requested_by_name }}
+          <small>{{ q.created_at|localdt }} · {{ q.reason|truncate(70) }}</small></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="muted small">No hay solicitudes pendientes.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if recent_logins is defined %}
+    <section class="card">
+      <h3>Últimos accesos</h3>
+      <ul class="mini-list">
+        {% for s in recent_logins %}
+        <li>{{ s.full_name }}<small>{{ s.created_at|localdt }} · IP {{ s.ip }} · {{ 'sesión cerrada' if s.ended_at else 'sesión activa' }}</small></li>
+        {% else %}<li class="muted">Sin accesos registrados.</li>{% endfor %}
+      </ul>
+      <a class="small" href="{{ url_for('logs.sessions') }}">Ver registro completo</a>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h3>Cómo funciona</h3>
+      <ol class="small muted steps">
+        <li>Cree un informe por equipo o importe una matriz Excel.</li>
+        <li>Tome una foto clara de las características del equipo: el informe se autocompleta.</li>
+        <li>Revise, firme y pulse <b>Guardar cambios</b>; puede seguir editando.</li>
+        <li><b>Cerrar informe</b> lo bloquea. Para editarlo de nuevo, solicite la reapertura.</li>
+      </ol>
+    </section>
+  </aside>
+</div>
 {% endblock %}

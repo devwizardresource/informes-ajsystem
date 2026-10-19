@@ -4,7 +4,8 @@ Los campos definitivos NO están en el código: se describen en report_templates
 Para integrar la plantilla oficial basta con añadir un JSON nuevo (y su plantilla HTML de
 documento) y activarlo con AJS_REPORT_TEMPLATE; los informes existentes conservan la suya.
 
-Tipos admitidos: text, textarea, date, integer, select, checkbox.
+Tipos admitidos: text, textarea, date, integer, select, checkbox. Un select puede mostrarse
+como casillas excluyentes ("widget": "radio"), igual que el formato impreso.
 """
 from __future__ import annotations
 
@@ -12,13 +13,15 @@ import datetime as dt
 import json
 import re
 from dataclasses import dataclass
+from typing import NamedTuple
 from functools import lru_cache
 from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "report_templates"
 _CODE_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 FIELD_TYPES = {"text", "textarea", "date", "integer", "select", "checkbox"}
-MAPPABLE_COLUMNS = {"title": 200, "equipment_serial": 100}
+MAPPABLE_COLUMNS = {"title": 200, "equipment_serial": 100, "equipment_brand": 100}
+WIDGETS = {"", "radio"}
 
 
 class TemplateError(RuntimeError):
@@ -35,6 +38,16 @@ class Field:
     maps_to: str | None
     options: tuple[str, ...]
     help: str
+    widget: str = ""
+    placeholder: str = ""
+    default: str | None = None
+
+
+class Section(NamedTuple):
+    id: str
+    title: str
+    fields: tuple[Field, ...]
+    number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -44,11 +57,14 @@ class Template:
     provisional: bool
     notice: str
     document_template: str
-    sections: tuple[tuple[str, str, tuple[Field, ...]], ...]
+    sections: tuple[Section, ...]
 
     @property
     def fields(self) -> list[Field]:
-        return [f for _sid, _title, fields in self.sections for f in fields]
+        return [f for sec in self.sections for f in sec.fields]
+
+    def field(self, field_id: str) -> Field | None:
+        return next((f for f in self.fields if f.id == field_id), None)
 
 
 @lru_cache(maxsize=16)
@@ -73,6 +89,8 @@ def load_template(code: str) -> Template:
                 raise TemplateError(f"maps_to inválido: {maps_to}")
             if maps_to:
                 mapped.add(maps_to)
+            if f.get("widget", "") not in WIDGETS:
+                raise TemplateError(f"widget no admitido: {f.get('widget')}")
             max_len = int(f.get("max_length", 1000))
             if maps_to:
                 max_len = min(max_len, MAPPABLE_COLUMNS[maps_to])
@@ -80,8 +98,9 @@ def load_template(code: str) -> Template:
                 id=f["id"], label=f["label"], type=f["type"], max_length=max_len,
                 required_on_close=bool(f.get("required_on_close", False)), maps_to=maps_to,
                 options=tuple(f.get("options", [])), help=f.get("help", ""),
+                widget=f.get("widget", ""), placeholder=f.get("placeholder", ""), default=f.get("default"),
             ))
-        sections.append((sec["id"], sec["title"], tuple(fields)))
+        sections.append(Section(sec["id"], sec.get("title", ""), tuple(fields), sec.get("number")))
     if raw["code"] != code:
         raise TemplateError("el código interno de la plantilla no coincide con el archivo")
     return Template(code=code, name=raw["name"], provisional=bool(raw.get("provisional")),
@@ -128,7 +147,7 @@ def missing_for_close(template: Template, data: dict) -> dict[str, str]:
 
 
 def mapped_columns(template: Template, data: dict) -> dict:
-    cols = {"title": "", "equipment_serial": None}
+    cols = {"title": "", "equipment_serial": None, "equipment_brand": None}
     for f in template.fields:
         if f.maps_to:
             value = data.get(f.id)
@@ -136,5 +155,29 @@ def mapped_columns(template: Template, data: dict) -> dict:
     return cols
 
 
-def empty_data(template: Template) -> dict:
-    return {f.id: (False if f.type == "checkbox" else None) for f in template.fields}
+def empty_data(template: Template, today: dt.date | None = None) -> dict:
+    data = {f.id: (False if f.type == "checkbox" else None) for f in template.fields}
+    for f in template.fields:
+        if f.type == "date" and f.default == "today" and today is not None:
+            data[f.id] = today.isoformat()
+    return data
+
+
+def clean_value(field: Field, value) -> str | None:
+    """Normaliza un valor sugerido (OCR o Excel) para el campo; None si no es aplicable."""
+    if value is None:
+        return None
+    text = " ".join(str(value).split()) if field.type != "textarea" else str(value).strip()
+    if not text:
+        return None
+    if field.type == "date":
+        try:
+            return dt.date.fromisoformat(text[:10]).isoformat()
+        except ValueError:
+            return None
+    if field.type == "select":
+        match = next((o for o in field.options if o.lower() == text.lower()), None)
+        return match
+    if field.type in ("checkbox", "integer"):
+        return None
+    return text[: field.max_length]

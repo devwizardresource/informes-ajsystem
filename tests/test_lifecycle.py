@@ -23,16 +23,16 @@ def test_crear_guardar_recuperar_y_editar(browser, make_user, q):
     row = q("SELECT code, owner_id, status_code, revision FROM reports WHERE id = %s", (rid,))[0]
     assert row["owner_id"] == t["id"] and row["status_code"] == "EN_ELABORACION" and row["code"].startswith("AJ-")
 
-    assert fill(b, q, rid, titulo="Primer título", observaciones="Línea 1").status_code == 302
+    assert fill(b, q, rid, nombre="Primer título", disco="Línea 1").status_code == 302
     assert status(q, rid) == "EN_ELABORACION"  # guardar NO cierra
-    assert data(q, rid)["titulo"] == "Primer título"
+    assert data(q, rid)["nombre"] == "Primer título"
 
     # Recuperación tras volver a abrir: el formulario muestra los datos persistidos
     html = b.get(f"/informes/{rid}").get_data(as_text=True)
     assert 'value="Primer título"' in html and "Guardar cambios" in html
 
-    assert fill(b, q, rid, titulo="Título editado").status_code == 302
-    assert data(q, rid)["titulo"] == "Título editado"
+    assert fill(b, q, rid, nombre="Título editado").status_code == 302
+    assert data(q, rid)["nombre"] == "Título editado"
     assert revision_of(q, rid) == 3
     assert q("SELECT COUNT(*) AS n FROM report_versions WHERE report_id = %s", (rid,))[0]["n"] == 3
     assert events(q, rid) == ["CREAR", "GUARDAR", "GUARDAR"]
@@ -50,16 +50,16 @@ def test_guardar_sin_cambios_no_crea_revision(browser, make_user, q):
 def test_conflicto_de_edicion_concurrente(browser, make_user, q):
     b = browser(make_user("TECNICO"))
     rid = create_report(b)
-    fill(b, q, rid, titulo="A")
-    r = b.post(f"/informes/{rid}/guardar", {"titulo": "B", "revision": 1, "accion": "guardar"}, csrf_from="/")
+    fill(b, q, rid, nombre="A")
+    r = b.post(f"/informes/{rid}/guardar", {"nombre": "B", "revision": 1, "accion": "guardar"}, csrf_from="/")
     assert r.status_code == 302
-    assert data(q, rid)["titulo"] == "A"  # la revisión obsoleta no sobrescribe
+    assert data(q, rid)["nombre"] == "A"  # la revisión obsoleta no sobrescribe
 
 
 def test_cierre_valida_obligatorios(browser, make_user, q):
     b = browser(make_user("TECNICO"))
     rid = create_report(b)
-    r = fill(b, q, rid, accion="cerrar", titulo="")
+    r = fill(b, q, rid, accion="cerrar", nombre="")
     assert r.status_code == 422 and "Obligatorio para cerrar" in r.get_data(as_text=True)
     assert status(q, rid) == "EN_ELABORACION"
 
@@ -68,7 +68,7 @@ def test_cierre_bloquea_edicion_del_tecnico(browser, make_user, q):
     t = make_user("TECNICO")
     b = browser(t)
     rid = create_report(b)
-    r = fill(b, q, rid, accion="cerrar", titulo="Informe final")
+    r = fill(b, q, rid, accion="cerrar", nombre="Informe final")
     assert r.status_code == 302 and status(q, rid) == "CERRADO"
     row = q("SELECT closed_by, closed_at FROM reports WHERE id = %s", (rid,))[0]
     assert row["closed_by"] == t["id"] and row["closed_at"]
@@ -77,11 +77,11 @@ def test_cierre_bloquea_edicion_del_tecnico(browser, make_user, q):
 
     # Solicitud HTTP manual que intenta modificar el informe cerrado
     rev = revision_of(q, rid)
-    r = b.post(f"/informes/{rid}/guardar", {"titulo": "MANIPULADO", "revision": rev, "accion": "guardar"})
+    r = b.post(f"/informes/{rid}/guardar", {"nombre": "MANIPULADO", "revision": rev, "accion": "guardar"})
     assert r.status_code == 302
-    assert data(q, rid)["titulo"] == "Informe final" and revision_of(q, rid) == rev
-    r = b.post(f"/informes/{rid}/guardar", {"titulo": "MANIPULADO", "revision": rev, "accion": "cerrar", "op_id": new_op()})
-    assert data(q, rid)["titulo"] == "Informe final"
+    assert data(q, rid)["nombre"] == "Informe final" and revision_of(q, rid) == rev
+    r = b.post(f"/informes/{rid}/guardar", {"nombre": "MANIPULADO", "revision": rev, "accion": "cerrar", "op_id": new_op()})
+    assert data(q, rid)["nombre"] == "Informe final"
     assert q("SELECT COUNT(*) AS n FROM audit_log WHERE event_type IN ('ACCESO_DENEGADO','OPERACION_INFORME_RECHAZADA') "
              "AND username = %s AND object_id = %s", (t["username"], str(rid)))[0]["n"] >= 2
 
@@ -99,7 +99,7 @@ def test_envio_y_visibilidad_en_paneles(browser, make_user, q):
     t, j, a = make_user("TECNICO"), make_user("JEFE"), make_user("RESPONSABLE")
     b = browser(t)
     rid = create_report(b)
-    fill(b, q, rid, accion="cerrar", titulo="Equipo de contabilidad", numero_serie="SN-VIS-77")
+    fill(b, q, rid, accion="cerrar", nombre="Equipo de contabilidad", numero_serie="SN-VIS-77")
     code = q("SELECT code FROM reports WHERE id = %s", (rid,))[0]["code"]
     # Antes de enviar: no visible para los destinatarios
     assert code not in browser(j).get("/").get_data(as_text=True)
@@ -134,7 +134,7 @@ def test_envio_duplicado(browser, make_user, q):
 def _closed_and_sent(browser, q, tech):
     b = browser(tech)
     rid = create_report(b)
-    fill(b, q, rid, accion="cerrar", titulo="Original")
+    fill(b, q, rid, accion="cerrar", nombre="Original")
     b.post(f"/informes/{rid}/enviar", {"op_id": new_op()})
     return b, rid
 
@@ -152,8 +152,8 @@ def test_reapertura_por_jefe_y_nuevo_cierre_conserva_historial(browser, make_use
     assert det["estado_anterior"] == "ENVIADO" and det["estado_nuevo"] == "REABIERTO" and "memoria RAM" in det["motivo"]
 
     # Tras reabrir, el técnico autor puede editar de nuevo y volver a cerrar y enviar
-    assert fill(bt, q, rid, titulo="Corregido").status_code == 302
-    assert fill(bt, q, rid, accion="cerrar", titulo="Corregido").status_code == 302
+    assert fill(bt, q, rid, nombre="Corregido").status_code == 302
+    assert fill(bt, q, rid, accion="cerrar", nombre="Corregido").status_code == 302
     assert bt.post(f"/informes/{rid}/enviar", {"op_id": new_op()}).status_code == 302
     assert events(q, rid) == ["CREAR", "GUARDAR", "CERRAR", "ENVIAR", "REABRIR", "GUARDAR", "CERRAR", "ENVIAR"]
     titles = [r["title"] for r in q("SELECT title FROM report_versions WHERE report_id=%s ORDER BY revision", (rid,))]
@@ -167,7 +167,7 @@ def test_reapertura_por_responsable_y_edicion_directiva(browser, make_user, q):
     ba = browser(a)
     assert ba.post(f"/informes/{rid}/reabrir", {"motivo": "Revisión solicitada por gerencia", "op_id": new_op()}).status_code == 302
     assert status(q, rid) == "REABIERTO"
-    assert fill(ba, q, rid, titulo="Ajustado por responsable").status_code == 302
+    assert fill(ba, q, rid, nombre="Ajustado por responsable").status_code == 302
     assert q("SELECT updated_by FROM reports WHERE id=%s", (rid,))[0]["updated_by"] == a["id"]
 
 
@@ -201,7 +201,7 @@ def test_consolidacion_filtros_y_paginacion(browser, make_user, q):
     serial = "SN-PAG-" + new_op()[:6]
     for i in range(7):
         rid = create_report(bt)
-        fill(bt, q, rid, accion="cerrar", titulo=f"Lote {i}", numero_serie=serial)
+        fill(bt, q, rid, accion="cerrar", nombre=f"Lote {i}", numero_serie=serial)
         bt.post(f"/informes/{rid}/enviar", {"op_id": new_op()})
     bj = browser(j)
     p1 = bj.get(f"/consolidacion?serie={serial}").get_data(as_text=True)
@@ -219,6 +219,6 @@ def test_consolidacion_filtros_y_paginacion(browser, make_user, q):
 def test_escape_xss_en_datos_del_informe(browser, make_user, q):
     b = browser(make_user("TECNICO"))
     rid = create_report(b)
-    fill(b, q, rid, titulo="<script>alert(1)</script>")
+    fill(b, q, rid, nombre="<script>alert(1)</script>")
     html = b.get(f"/informes/{rid}").get_data(as_text=True)
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html

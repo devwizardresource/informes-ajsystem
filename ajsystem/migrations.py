@@ -60,6 +60,10 @@ def _is_mariadb(conn) -> bool:
         return "mariadb" in str(cur.fetchone()["v"]).lower()
 
 
+def default_collation(conn) -> str:
+    return "utf8mb4_unicode_520_ci" if _is_mariadb(conn) else "utf8mb4_0900_ai_ci"
+
+
 def _adapt(stmt: str, mariadb: bool) -> str:
     if mariadb:
         for old, new in _MARIADB_REWRITES:

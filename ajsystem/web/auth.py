@@ -50,15 +50,22 @@ def login():
         flash(GENERIC_FAIL, "error")
         return render_template("login.html", next=next_url, username=username), 400
 
+    # Se admite el nombre de usuario o el número de identificación (ambos son únicos entre sí).
+    row = db.query_one(
+        """SELECT u.id, u.username, u.full_name, u.password_hash, u.is_active, r.code AS role_code
+             FROM users u JOIN roles r ON r.id = u.role_id
+            WHERE u.username = %s OR u.id_number = %s
+            ORDER BY u.username = %s DESC LIMIT 1""",
+        (username, users.normalize_id_number(username) or None, username))
+    typed = username  # lo que escribió la persona (no se revela el usuario asociado a una identificación)
+    if row:
+        username = row["username"]  # el registro y el límite de intentos usan el usuario real
     if _too_many_attempts(username, client["ip"]):
         audit.write_standalone(audit.LOGIN_BLOCKED, "DENEGADO", username=username,
                                detail={"motivo": "límite de intentos fallidos alcanzado"})
         flash("Demasiados intentos fallidos. Espere unos minutos antes de volver a intentarlo.", "error")
-        return render_template("login.html", next=next_url, username=username), 429
+        return render_template("login.html", next=next_url, username=typed), 429
 
-    row = db.query_one(
-        """SELECT u.id, u.username, u.full_name, u.password_hash, u.is_active, r.code AS role_code
-             FROM users u JOIN roles r ON r.id = u.role_id WHERE u.username = %s""", (username,))
     ok = passwords.verify_password(row["password_hash"] if row else None, password)
     if not ok or not row["is_active"]:
         reason = "usuario inexistente" if not row else ("cuenta inactiva" if ok else "contraseña incorrecta")
@@ -66,7 +73,7 @@ def login():
                                user_id=row["id"] if row else None, role_code=row["role_code"] if row else None,
                                detail={"motivo": reason})
         flash(GENERIC_FAIL, "error")
-        return render_template("login.html", next=next_url, username=username), 401
+        return render_template("login.html", next=next_url, username=typed), 401
 
     previous_token = request.cookies.get(current_app.config["AJS_SETTINGS"].cookie_name)
     with db.transaction() as cur:

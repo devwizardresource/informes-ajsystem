@@ -6,9 +6,10 @@ El código vive en GitHub (`devwizardresource/informes-ajsystem`) y Hostinger lo
 
 | Archivo | Función |
 |---|---|
-| `package.json` | Lo exige el importador de Hostinger. `npm run build` prepara Python; `npm start` arranca la app |
-| `hostinger/python-env.js` | Busca Python 3.9+ en el servidor, crea `.venv-runtime/` e instala `requirements.txt` (WeasyPrint es opcional: si Pango falta, solo falla la descarga de PDF) |
-| `server.js` | Escucha en `PORT`, aplica migraciones, crea el primer responsable si se configura, arranca gunicorn en `127.0.0.1` y le reenvía el tráfico |
+| `package.json` / `package-lock.json` | Lo exige el importador de Hostinger (sin dependencias npm). `npm run build` verifica y prepara Python; `npm start` arranca la app |
+| `hostinger/integrity.js` | Comprueba el SHA-256 de los archivos de terceros servidos al navegador (OCR y fuentes); si alguno cambió, la app no arranca |
+| `hostinger/python-env.js` | Busca Python **3.10+**, crea `.venv-runtime/` e instala `requirements.lock` con `--require-hashes --only-binary :all:` (cada paquete verificado por hash) |
+| `server.js` | Escucha en `PORT`, aplica migraciones, crea el primer responsable si se configura, arranca gunicorn en un socket Unix local y le reenvía el tráfico |
 
 ### Pasos en hPanel
 
@@ -32,6 +33,7 @@ AJS_TIMEZONE=America/Bogota
 # Solo para el primer despliegue (bórrelas después):
 AJS_INITIAL_ADMIN_USER=responsable
 AJS_INITIAL_ADMIN_NAME=Nombre Apellido
+AJS_INITIAL_ADMIN_ID=<número de identificación, opcional; también sirve para entrar>
 AJS_INITIAL_ADMIN_PASSWORD=<temporal; se cambia en el primer acceso>
 ```
 
@@ -40,6 +42,12 @@ AJS_INITIAL_ADMIN_PASSWORD=<temporal; se cambia en el primer acceso>
 5. Cada `git push` a `main` se vuelve a desplegar (si activa el despliegue automático); las migraciones nuevas se aplican al arrancar. **Haga un respaldo antes de publicar una migración.**
 
 Variables opcionales: `AJS_AUTO_MIGRATE=0` (no migrar al arrancar), `AJS_DB_ADMIN_USER`/`AJS_DB_ADMIN_PASSWORD` (cuenta distinta para migrar), `AJS_PYTHON` (ruta del intérprete), `AJS_WORKERS`/`AJS_THREADS` (por defecto 2/4), `AJS_EDGE_PROXY_HOPS` (proxies de Hostinger delante de Node, por defecto 1).
+
+### Antes de cada despliegue
+
+Ejecute `npm run audit:security` (o deje que lo haga la CI de GitHub en cada push) y despliegue solo con la auditoría y las pruebas en verde. La migración 0003 (plantilla oficial, fotos, solicitudes de reapertura) se aplica sola al arrancar: **haga antes un respaldo de la base desde hPanel**.
+
+Las fotos y firmas se guardan en la base de datos (no en el disco de la app), así que sobreviven a los redespliegues de Hostinger y entran en los respaldos de la base. Con `max_allowed_packet` por defecto de MariaDB (16 MB) caben de sobra (cada foto se guarda recomprimida, normalmente < 1,5 MB).
 
 ### Limitaciones en Hostinger compartido
 

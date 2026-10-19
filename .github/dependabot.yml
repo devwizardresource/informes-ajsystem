@@ -1,0 +1,13 @@
+# Avisos y propuestas de actualización de dependencias (revisión humana obligatoria antes de fusionar).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: "/scripts/vendor-audit"
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: monthly }

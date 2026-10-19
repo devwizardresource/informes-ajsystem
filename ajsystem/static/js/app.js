@@ -14,6 +14,16 @@
     });
   }
 
+  // Áreas de texto que crecen con su contenido (celdas del formato de informe)
+  function grow(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
+  document.querySelectorAll("textarea[data-autogrow]").forEach(function (t) {
+    grow(t);
+    t.addEventListener("input", function () { grow(t); });
+  });
+  window.addEventListener("resize", function () {
+    document.querySelectorAll("textarea[data-autogrow]").forEach(grow);
+  });
+
   // Formularios con edición pendiente: aviso al abandonar la página sin guardar
   var dirty = false;
   document.querySelectorAll("form[data-dirty-guard]").forEach(function (form) {

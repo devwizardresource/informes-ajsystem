@@ -6,7 +6,9 @@ import re
 from . import audit, db
 from .security import passwords
 
-USERNAME_RE = re.compile(r"^[a-z0-9._-]{3,64}$")
+# Nombre de usuario: puede ser un alias, el nombre completo o el número de identificación.
+USERNAME_RE = re.compile(r"^(?=.{3,64}$)[a-z0-9áéíóúüñ._-]+(?: [a-z0-9áéíóúüñ._-]+)*$")
+ID_NUMBER_RE = re.compile(r"^[A-Z0-9-]{4,20}$")
 
 
 class UserError(Exception):
@@ -17,7 +19,12 @@ class UserError(Exception):
 
 
 def normalize_username(value: str) -> str:
-    return (value or "").strip().lower()[:64]
+    return " ".join((value or "").split()).lower()[:64]
+
+
+def normalize_id_number(value: str) -> str:
+    """Número de identificación sin puntos ni espacios (1.234.567 → 1234567)."""
+    return "".join(c for c in (value or "") if c not in ". ").upper()[:20]
 
 
 def roles() -> list[dict]:
@@ -26,7 +33,7 @@ def roles() -> list[dict]:
 
 def list_users() -> list[dict]:
     return db.query_all(
-        """SELECT u.id, u.username, u.full_name, u.email, u.is_active, u.must_change_password, u.created_at,
+        """SELECT u.id, u.username, u.full_name, u.id_number, u.is_active, u.must_change_password, u.created_at,
                   u.last_login_at, r.code AS role_code, r.display_name AS role_name
              FROM users u JOIN roles r ON r.id = u.role_id ORDER BY r.id, u.full_name""")
 
@@ -35,14 +42,15 @@ def technicians_and_owners() -> list[dict]:
     return db.query_all("SELECT id, full_name, username FROM users ORDER BY full_name")
 
 
-def _validate_new(username: str, full_name: str, email: str, password: str, role_id) -> dict:
+def _validate_new(username: str, full_name: str, id_number: str, password: str, role_id) -> dict:
     errors = {}
     if not USERNAME_RE.match(username):
-        errors["username"] = "Entre 3 y 64 caracteres: minúsculas, números, punto, guion o guion bajo."
+        errors["username"] = ("Entre 3 y 64 caracteres: letras, números, espacios, punto, guion o guion bajo "
+                              "(puede usar el nombre completo o el número de identificación).")
     if not (2 <= len(full_name) <= 120):
         errors["full_name"] = "Nombre obligatorio (2 a 120 caracteres)."
-    if email and (len(email) > 190 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)):
-        errors["email"] = "Correo no válido."
+    if id_number and not ID_NUMBER_RE.match(id_number):
+        errors["id_number"] = "Número de identificación no válido (4 a 20 letras, números o guion)."
     pw_errors = passwords.validate_policy(password, username)
     if pw_errors:
         errors["password"] = " ".join(pw_errors)
@@ -51,29 +59,46 @@ def _validate_new(username: str, full_name: str, email: str, password: str, role
     return errors
 
 
-def create_user(username, full_name, email, password, role_id, *, actor_note: dict | None = None,
+def _identity_taken(cur, username: str | None, id_number: str | None, exclude_id: int | None = None) -> dict:
+    """El usuario y el número de identificación sirven para iniciar sesión: no pueden coincidir con los de otro."""
+    errors = {}
+    keys = [k for k in (username, id_number.lower() if id_number else None) if k]
+    placeholders = ",".join(["%s"] * len(keys))
+    cur.execute(f"""SELECT id, username, id_number FROM users
+                     WHERE (LOWER(username) IN ({placeholders}) OR LOWER(id_number) IN ({placeholders}))
+                       AND id <> %s FOR UPDATE""", (*keys, *keys, exclude_id or 0))
+    for row in cur.fetchall():
+        hits = {row["username"].lower(), (row["id_number"] or "").lower()}
+        if username and username in hits:
+            errors["username"] = "Nombre de usuario en uso."
+        if id_number and id_number.lower() in hits:
+            errors["id_number"] = "Número de identificación ya registrado."
+    return errors
+
+
+def create_user(username, full_name, id_number, password, role_id, *, actor_note: dict | None = None,
                 must_change: bool = True, audit_overrides: dict | None = None) -> int:
     username = normalize_username(username)
-    full_name = (full_name or "").strip()
-    email = (email or "").strip() or None
+    full_name = " ".join((full_name or "").split())
+    id_number = normalize_id_number(id_number) or None
     try:
         role_id = int(role_id)
     except (TypeError, ValueError):
         role_id = -1
-    errors = _validate_new(username, full_name, email or "", password or "", role_id)
+    errors = _validate_new(username, full_name, id_number or "", password or "", role_id)
     if errors:
         raise UserError("Revise los datos del usuario.", errors)
     pw_hash = passwords.hash_password(password)
     with db.transaction() as cur:
-        cur.execute("SELECT id FROM users WHERE username = %s FOR UPDATE", (username,))
-        if cur.fetchone():
-            raise UserError("Ya existe un usuario con ese nombre.", {"username": "Nombre de usuario en uso."})
+        taken = _identity_taken(cur, username, id_number)
+        if taken:
+            raise UserError("Ya existe un usuario con ese nombre o número de identificación.", taken)
         now = db.utcnow()
         cur.execute(
-            """INSERT INTO users (username, full_name, email, password_hash, role_id, is_active,
+            """INSERT INTO users (username, full_name, id_number, password_hash, role_id, is_active,
                                   must_change_password, created_at, updated_at, password_changed_at)
                VALUES (%s, %s, %s, %s, %s, 1, %s, %s, %s, %s)""",
-            (username, full_name, email, pw_hash, role_id, 1 if must_change else 0, now, now, now))
+            (username, full_name, id_number, pw_hash, role_id, 1 if must_change else 0, now, now, now))
         new_id = cur.lastrowid
         cur.execute("SELECT code FROM roles WHERE id = %s", (role_id,))
         role_code = cur.fetchone()["code"]
@@ -135,6 +160,26 @@ def set_active(user_id: int, active: bool, actor: dict) -> None:
             revoked = cur.rowcount
         audit.write(cur, audit.USER_STATUS_CHANGED, "EXITO", object_type="usuario", object_id=target["username"],
                     detail={"usuario_id": user_id, "activo": active, "sesiones_revocadas": revoked})
+
+
+def set_id_number(user_id: int, id_number: str, actor: dict) -> None:
+    id_number = normalize_id_number(id_number) or None
+    if id_number and not ID_NUMBER_RE.match(id_number):
+        raise UserError("Número de identificación no válido (4 a 20 letras, números o guion).")
+    with db.transaction() as cur:
+        target = _lock_user(cur, user_id)
+        cur.execute("SELECT id_number FROM users WHERE id = %s", (user_id,))
+        previous = cur.fetchone()["id_number"]
+        if previous == id_number:
+            return
+        if id_number:
+            taken = _identity_taken(cur, None, id_number, exclude_id=user_id)
+            if taken:
+                raise UserError("Ese número de identificación ya está registrado o es el usuario de otra persona.")
+        cur.execute("UPDATE users SET id_number = %s, updated_at = %s WHERE id = %s", (id_number, db.utcnow(), user_id))
+        audit.write(cur, audit.USER_UPDATED, "EXITO", object_type="usuario", object_id=target["username"],
+                    detail={"usuario_id": user_id, "cambio": "número de identificación",
+                            "anterior": previous, "nuevo": id_number})
 
 
 def reset_password(user_id: int, new_password: str, actor: dict) -> None:

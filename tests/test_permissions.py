@@ -52,21 +52,26 @@ def test_tecnico_no_ve_informes_ajenos(browser, make_user):
     rid = create_report(ba)
     bb = browser(b_user)
     assert bb.get(f"/informes/{rid}").status_code == 404
-    r = bb.post(f"/informes/{rid}/guardar", {"titulo": "intrusión", "revision": 1, "accion": "guardar"})
+    r = bb.post(f"/informes/{rid}/guardar", {"nombre": "intrusión", "revision": 1, "accion": "guardar"})
     assert r.status_code == 404
     assert bb.post(f"/informes/{rid}/enviar", {"op_id": new_op()}).status_code == 404
 
 
-def test_jefe_no_ve_borradores_no_enviados_de_tecnicos(browser, make_user):
-    t, j = make_user("TECNICO"), make_user("JEFE")
-    rid = create_report(browser(t))
-    assert browser(j).get(f"/informes/{rid}").status_code == 404
+@pytest.mark.parametrize("role", ["JEFE", "RESPONSABLE"])
+def test_jefe_y_responsable_ven_y_editan_cualquier_informe(browser, make_user, q, role):
+    """Regla de negocio: el jefe y el responsable pueden consultar y editar todos los informes."""
+    t, boss = make_user("TECNICO"), make_user(role)
+    rid = create_report(browser(t))  # borrador nunca enviado
+    bj = browser(boss)
+    assert bj.get(f"/informes/{rid}").status_code == 200
+    assert fill(bj, q, rid, nombre="Corregido por dirección").status_code == 302
+    assert q("SELECT title FROM reports WHERE id = %s", (rid,))[0]["title"] == "Corregido por dirección"
 
 
 def test_jefe_no_gestiona_usuarios(browser, make_user):
     b = browser(make_user("JEFE"))
     assert b.get("/administracion/usuarios").status_code == 403
-    r = b.post("/administracion/usuarios", {"username": "x_nuevo", "full_name": "X", "password": "Clave-larga-12345", "role_id": 1})
+    r = b.post("/administracion/usuarios", {"username": "x_nuevo", "full_name": "X", "password": "Clave-Larga-12345!", "role_id": 1})
     assert r.status_code == 403
 
 
@@ -81,7 +86,7 @@ def test_responsable_gestiona_usuarios_y_queda_auditado(browser, make_user, q):
     admin = make_user("RESPONSABLE")
     b = browser(admin)
     r = b.post("/administracion/usuarios", {"username": "tecnico_nuevo_x", "full_name": "Técnico Nuevo",
-                                            "password": "Clave-temporal-123", "role_id": 3}, csrf_from="/administracion/usuarios")
+                                            "password": "Clave-Temporal-123", "role_id": 3}, csrf_from="/administracion/usuarios")
     assert r.status_code == 302
     new_id = q("SELECT id FROM users WHERE username = 'tecnico_nuevo_x'")[0]["id"]
     r = b.post(f"/administracion/usuarios/{new_id}/rol", {"role_id": 2}, csrf_from="/administracion/usuarios")

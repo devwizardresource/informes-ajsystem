@@ -1,9 +1,13 @@
 # Dependencias de ejecución de AJ System (versiones fijadas; ver docs/DEPENDENCIAS.md)
+# Instalación verificada por hash: requirements.lock (generado con `make lock`, ver docs/SEGURIDAD.md)
 Flask==3.1.3            # Framework web WSGI (incluye Werkzeug, Jinja2, itsdangerous)
 Werkzeug==3.1.9
 Jinja2==3.1.6
 PyMySQL==1.2.3          # Driver MySQL en Python puro (consultas parametrizadas)
 argon2-cffi==25.1.0     # Hash de contraseñas Argon2id
 python-dotenv==1.2.4    # Carga de variables de entorno desde .env (solo desarrollo)
-gunicorn==23.0.0        # Servidor WSGI de producción (Hostinger: lo arranca server.js)
+gunicorn==26.2.0        # Servidor WSGI de producción (Hostinger: lo arranca server.js)
+Pillow==12.3.0          # Validación y recodificación de fotos y firmas (elimina EXIF/GPS)
+openpyxl==3.1.5         # Lectura de la matriz Excel de importación
+defusedxml==0.7.1       # openpyxl lo usa para bloquear entidades XML externas
 weasyprint==70.0        # HTML -> PDF en el servidor (requiere Pango del sistema)

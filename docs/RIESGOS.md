@@ -4,12 +4,12 @@
 
 | # | Tema | Impacto |
 |---|---|---|
-| 1 | **Alojamiento**: GitHub Pages no ejecuta Python ni MySQL | Sin despliegue hasta decidir (ver DESPLIEGUE.md) |
-| 2 | **Plantilla oficial** (campos y PDF) | Los campos y el documento actuales son provisionales |
+| 1 | **Plan de Hostinger**: Python 3.10+, Pango (PDF) y permiso para disparadores en MariaDB | Si falta alguno, la app no arranca o no genera PDF (ver DESPLIEGUE.md); alternativa: VPS |
+| 2 | Fila «Marca» añadida al formato oficial | Confirmar que se mantiene (permite ordenar equipos por marca y serie) |
 | 3 | Nombre visible del perfil responsable | Configurable en cualquier momento, sin código |
 | 4 | Interpretaciones de negocio de ROLES_Y_PERMISOS.md (visibilidad de borradores, «pendiente de revisión», edición tras reabrir) | Confirmar o ajustar |
 | 5 | Política de copias (frecuencia, retención, cifrado y ubicación externa) | Propuesta en RESPALDO_Y_RESTAURACION.md |
-| 6 | Servidor WSGI de producción y `pip-audit` | Dependencias pendientes de autorización |
+| 6 | Protección de la rama `main` en GitHub exigiendo la CI | Sin ella, un push con pruebas fallidas también se despliega en Hostinger |
 
 ## Riesgos técnicos residuales
 
@@ -17,6 +17,8 @@
 - **Clave HMAC**: si se pierde, no podrá verificarse el histórico; si se filtra, se debilita la detección. Aún no existe un procedimiento de rotación.
 - **Sistema operativo e IP**: el sistema operativo lo declara el cliente; la IP solo es fiable sin proxy o con `AJS_TRUST_PROXY_HOPS` correcto.
 - **Límite de intentos por IP**: un atacante con muchas IP puede repartir los intentos. El límite por usuario lo mitiga, aunque permite bloquear temporalmente una cuenta de forma deliberada (15 minutos).
+- **OCR**: la calidad depende de la foto (enfoque, reflejos, ángulo). Las sugerencias solo rellenan campos vacíos y el técnico debe revisarlas antes de guardar. La primera foto en cada dispositivo descarga ≈ 5 MB de modelos de idioma (quedan en caché).
+- **Tamaño de la base**: las fotos se guardan en MariaDB/MySQL (≈ 0,3–1,5 MB cada una, máximo 40 por informe). Vigile la cuota de la base del plan de Hostinger.
 - **Serialización de la auditoría**: todas las escrituras pasan por una fila bloqueada. Es suficiente para decenas de usuarios; con mucha concurrencia habría que revisarlo.
 - **DDL no transaccional**: una migración que falle a mitad puede dejar el esquema parcial. Por eso se exige un respaldo previo.
 - **WeasyPrint** depende de Pango del sistema: en un alojamiento compartido podría no estar disponible. La aplicación sigue funcionando y la descarga muestra un error controlado y auditado.

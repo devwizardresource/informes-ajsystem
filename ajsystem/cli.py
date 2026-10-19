@@ -51,14 +51,14 @@ def register_cli(app) -> None:
     @click.option("--username", required=True)
     @click.option("--full-name", required=True)
     @click.option("--role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO"]), required=True)
-    @click.option("--email", default="")
-    def create_user(username, full_name, role, email):
+    @click.option("--id-number", default="", help="Número de identificación (también sirve para iniciar sesión)")
+    def create_user(username, full_name, role, id_number):
         """Crea un usuario (pide la contraseña temporal de forma interactiva)."""
         password = os.environ.get("AJS_NEW_USER_PASSWORD") or click.prompt(
             "Contraseña temporal", hide_input=True, confirmation_prompt=True)
         role_row = db.query_one("SELECT id FROM roles WHERE code = %s", (role,))
         try:
-            uid = users.create_user(username, full_name, email, password, role_row["id"],
+            uid = users.create_user(username, full_name, id_number, password, role_row["id"],
                                     actor_note={"origen": "cli"}, audit_overrides=_cli_actor())
         except users.UserError as exc:
             raise click.ClickException(f"{exc.message} {exc.field_errors}")
@@ -82,7 +82,8 @@ def register_cli(app) -> None:
         full_name = os.environ.get("AJS_INITIAL_ADMIN_NAME", "").strip() or "Responsable"
         role_row = db.query_one("SELECT id FROM roles WHERE code = 'RESPONSABLE'")
         try:
-            uid = users.create_user(username, full_name, "", password, role_row["id"],
+            uid = users.create_user(username, full_name, os.environ.get("AJS_INITIAL_ADMIN_ID", ""), password,
+                                    role_row["id"],
                                     actor_note={"origen": "arranque"}, audit_overrides=_cli_actor())
         except users.UserError as exc:
             raise click.ClickException(f"{exc.message} {exc.field_errors}")

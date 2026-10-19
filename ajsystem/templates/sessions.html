@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pagination with context %}
+{% block title %}Entradas y salidas de sesión{% endblock %}
+{% block content %}
+<h1>Registro detallado</h1>
+<nav class="tabs" aria-label="Secciones del registro">
+  <a href="{{ url_for('logs.index') }}">Eventos</a>
+  <a href="{{ url_for('logs.sessions') }}" aria-current="page">Entradas y salidas de sesión</a>
+</nav>
+<p class="muted small">Quién entró y salió del sistema, cuándo, desde qué IP y con qué sistema operativo. Solo visible para el responsable administrativo y el jefe. La IP es la observada por el servidor; el sistema operativo es el que informa el navegador.</p>
+
+<form class="card filters" method="get" action="{{ url_for('logs.sessions') }}">
+  <div><label for="usuario">Usuario o identificación</label><input id="usuario" name="usuario" value="{{ f.usuario }}" maxlength="64"></div>
+  <div><label for="ip">IP</label><input id="ip" name="ip" value="{{ f.ip }}" maxlength="45"></div>
+  <div><label for="estado">Sesiones</label><select id="estado" name="estado">
+    <option value="">Todas</option>
+    <option value="abiertas" {% if f.estado == 'abiertas' %}selected{% endif %}>Activas</option>
+    <option value="cerradas" {% if f.estado == 'cerradas' %}selected{% endif %}>Terminadas</option></select></div>
+  <div><label for="desde">Desde</label><input id="desde" name="desde" type="date" value="{{ f.desde }}"></div>
+  <div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="date" value="{{ f.hasta }}"></div>
+  <div class="filter-actions"><button type="submit" class="btn btn-primary">Filtrar</button> <a class="btn btn-ghost" href="{{ url_for('logs.sessions') }}">Limpiar</a></div>
+</form>
+
+<p class="muted">{{ total }} sesión(es).</p>
+<div class="table-wrap">
+<table class="table table-dense">
+  <thead><tr><th scope="col">Usuario</th><th scope="col">Perfil</th><th scope="col">Entrada</th><th scope="col">Salida</th><th scope="col">Cómo terminó</th><th scope="col">Duración</th><th scope="col">IP</th><th scope="col">Sistema operativo</th><th scope="col">Sesión</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td data-label="Usuario">{{ r.full_name }}<br><small class="muted">{{ r.username }}</small></td>
+      <td data-label="Perfil">{{ r.role_name }}</td>
+      <td data-label="Entrada" class="nowrap">{{ r.created_at|localdt('%Y-%m-%d %H:%M:%S') }}</td>
+      <td data-label="Salida" class="nowrap">{{ r.ended_at|localdt('%Y-%m-%d %H:%M:%S') if r.ended_at else '—' }}</td>
+      <td data-label="Cómo terminó">{{ r.end_label }}</td>
+      <td data-label="Duración">{{ r.minutes }} min</td>
+      <td data-label="IP"><code>{{ r.ip }}</code></td>
+      <td data-label="Sistema operativo">{{ r.os }}</td>
+      <td data-label="Sesión"><code>{{ r.public_id[:8] }}</code></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="muted">Sin sesiones registradas con esos filtros.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pagination(page, pages, 'logs.sessions') }}
+{% endblock %}

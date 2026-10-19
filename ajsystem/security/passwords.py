@@ -9,6 +9,8 @@ _hasher = PasswordHasher()  # Argon2id, t=3, m=64 MiB, p=4 (valores por defecto 
 _DUMMY_HASH = _hasher.hash("contraseña-ficticia-para-tiempo-constante")
 
 MIN_LENGTH = 12
+POLICY_TEXT = ("Mínimo 12 caracteres, con al menos una letra minúscula, una mayúscula, "
+               "un número y un símbolo.")
 MAX_LENGTH = 256
 
 
@@ -22,6 +24,14 @@ def validate_policy(password: str, username: str = "") -> list[str]:
         errors.append("La contraseña no puede contener el nombre de usuario.")
     if password.strip() != password:
         errors.append("La contraseña no puede empezar ni terminar con espacios.")
+    missing = [name for name, ok in (
+        ("una letra minúscula", any(c.islower() for c in password)),
+        ("una letra mayúscula", any(c.isupper() for c in password)),
+        ("un número", any(c.isdigit() for c in password)),
+        ("un símbolo (por ejemplo ! @ # $ % - _ *)", any(not c.isalnum() and not c.isspace() for c in password)),
+    ) if not ok]
+    if missing:
+        errors.append("La contraseña debe incluir " + ", ".join(missing) + ".")
     return errors
 
 

@@ -1,5 +1,5 @@
 -- AJ System · Privilegios mínimos de la cuenta de la aplicación.
--- Marcadores sustituidos por scripts/db_bootstrap.py: {db}, {app_user}, {app_host}
+-- Marcadores sustituidos por ajsystem/dbadmin.py: {db}, {app_user}, {app_host}
 -- La cuenta de la aplicación NO tiene privilegios DDL, DELETE, TRIGGER ni GRANT.
 -- Las tablas de auditoría e historial solo admiten SELECT e INSERT.
 
@@ -22,3 +22,8 @@ GRANT SELECT, INSERT, UPDATE ON `{db}`.system_settings  TO '{app_user}'@'{app_ho
 GRANT SELECT, INSERT ON `{db}`.report_versions TO '{app_user}'@'{app_host}';
 GRANT SELECT, INSERT ON `{db}`.report_events   TO '{app_user}'@'{app_host}';
 GRANT SELECT, INSERT ON `{db}`.audit_log       TO '{app_user}'@'{app_host}';
+
+-- Migración 0003: adjuntos (solo inserción; retirada lógica y texto OCR) y solicitudes de reapertura.
+GRANT SELECT, INSERT ON `{db}`.report_attachments TO '{app_user}'@'{app_host}';
+GRANT UPDATE (ocr_text, deleted_at, deleted_by) ON `{db}`.report_attachments TO '{app_user}'@'{app_host}';
+GRANT SELECT, INSERT, UPDATE ON `{db}`.reopen_requests TO '{app_user}'@'{app_host}';

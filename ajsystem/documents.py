@@ -10,6 +10,7 @@ Motor PDF: WeasyPrint (Python, BSD). Se importa de forma diferida para que un fa
 """
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -20,7 +21,9 @@ from .reports.service import STATUS_LABELS, _content_hash
 
 DOC_TEMPLATES_DIR = Path(__file__).resolve().parent / "document_templates"
 _env = Environment(loader=FileSystemLoader(str(DOC_TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
-ACTION_LABELS = {"CREAR": "Creación", "GUARDAR": "Guardado", "CERRAR": "Cierre", "ENVIAR": "Envío", "REABRIR": "Reapertura"}
+ACTION_LABELS = {"CREAR": "Creación", "GUARDAR": "Guardado", "CERRAR": "Cierre", "ENVIAR": "Envío",
+                 "REABRIR": "Reapertura", "SOLICITAR_REAPERTURA": "Solicitud de reapertura",
+                 "RECHAZAR_REAPERTURA": "Solicitud rechazada"}
 
 
 class PdfEngineUnavailable(RuntimeError):
@@ -39,10 +42,28 @@ def _display(field: schema.Field, value) -> str:
     return "" if value is None else str(value)
 
 
-def build_document_data(report: dict, events: list[dict], generated_by: dict, now, tz_name: str) -> dict:
+def _data_uri(mime: str, content: bytes) -> str:
+    return f"data:{mime};base64,{base64.b64encode(bytes(content)).decode('ascii')}"
+
+
+def build_document_data(report: dict, events: list[dict], generated_by: dict, now, tz_name: str,
+                        files: list[dict] | None = None, owner: dict | None = None) -> dict:
     tz = ZoneInfo(tz_name)
     template = schema.load_template(report["template_code"])
+    files = files or []
+    owner = owner or {"username": report.get("owner_username", ""), "full_name": report.get("owner_name", ""),
+                      "id_number": report.get("owner_id_number")}
+    code = report["code"]
     return {
+        "numero": code.rsplit("-", 1)[-1][-5:],
+        "anio": code.split("-")[1] if code.count("-") >= 2 else "",
+        "valores": {f.id: _display(f, report["data"].get(f.id)) for f in template.fields},
+        "registro": {"usuario": owner.get("username") or "", "nombre": owner.get("full_name") or "",
+                     "identificacion": owner.get("id_number") or ""},
+        "firmas": {a["kind"]: _data_uri(a["mime"], a["content"]) for a in files if a["kind"] != "FOTO"},
+        "fotos": [{"src": _data_uri(a["mime"], a["content"]), "fecha": _fmt(a["created_at"], tz),
+                   "autor": a["created_by_name"], "sha256": a["sha256"]} for a in files if a["kind"] == "FOTO"],
+        "secciones_plantilla": template.sections,
         "plantilla": {"codigo": template.code, "nombre": template.name, "provisional": template.provisional},
         "meta": {
             "codigo": report["code"],
@@ -61,9 +82,10 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
             "zona_horaria": tz_name,
         },
         "secciones": [
-            {"titulo": title, "campos": [{"id": f.id, "etiqueta": f.label, "tipo": f.type,
-                                          "valor": _display(f, report["data"].get(f.id))} for f in fields]}
-            for _sid, title, fields in template.sections
+            {"titulo": sec.title, "numero": sec.number,
+             "campos": [{"id": f.id, "etiqueta": f.label, "tipo": f.type,
+                         "valor": _display(f, report["data"].get(f.id))} for f in sec.fields]}
+            for sec in template.sections
         ],
         "historial": [
             {"accion": ACTION_LABELS.get(e["action"], e["action"]), "fecha": _fmt(e["created_at"], tz),
@@ -85,11 +107,21 @@ def render_pdf(doc: dict, document_template: str) -> bytes:
         raise PdfEngineUnavailable(str(exc)) from exc
     html = render_html(doc, document_template)
     # base_url restringido a la carpeta de plantillas: no se cargan recursos remotos.
-    return HTML(string=html, base_url=str(DOC_TEMPLATES_DIR), url_fetcher=_local_only_fetcher).write_pdf()
+    return HTML(string=html, base_url=str(DOC_TEMPLATES_DIR), url_fetcher=_local_only_fetcher()).write_pdf()
 
 
-def _local_only_fetcher(url: str, *args, **kwargs):
-    from weasyprint.urls import default_url_fetcher  # noqa: PLC0415
-    if not url.startswith("file://" + str(DOC_TEMPLATES_DIR)):
-        raise ValueError("recurso externo bloqueado en la generación de PDF")
-    return default_url_fetcher(url, *args, **kwargs)
+def _allowed(url: str) -> bool:
+    # Solo imágenes incrustadas (fotos/firmas del propio informe) y archivos de la carpeta de plantillas.
+    return url.startswith("data:image/") or url.startswith("file://" + str(DOC_TEMPLATES_DIR) + "/")
+
+
+def _local_only_fetcher():
+    from weasyprint.urls import URLFetcher  # noqa: PLC0415 (WeasyPrint ≥ 66)
+
+    class LocalOnlyFetcher(URLFetcher):
+        def fetch(self, url, headers=None):
+            if not _allowed(url):
+                raise ValueError("recurso externo bloqueado en la generación de PDF")
+            return super().fetch(url, headers)
+
+    return LocalOnlyFetcher(allowed_protocols={"file", "data"}, allow_redirects=False)

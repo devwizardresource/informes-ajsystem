@@ -11,6 +11,10 @@
   </form>
   {% endif %}
 </div>
+<nav class="tabs" aria-label="Secciones del registro">
+  <a href="{{ url_for('logs.index') }}" aria-current="page">Eventos</a>
+  <a href="{{ url_for('logs.sessions') }}">Entradas y salidas de sesión</a>
+</nav>
 <p class="muted small">Registro de solo lectura. Las horas se muestran en la zona horaria configurada; la IP es la observada por el servidor y el sistema operativo es el reportado por el navegador (no verificable).</p>
 
 <form class="card filters" method="get" action="{{ url_for('logs.index') }}">

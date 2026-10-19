@@ -2,25 +2,49 @@
 {% from "_macros.html" import report_rows with context %}
 {% block title %}Creación de informe{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>Creación de informe</h1>
-  {% if has_perm('report.create') %}
-  <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
-  </form>
-  {% endif %}
+<div class="layout">
+  <div class="main">
+    <div class="page-head">
+      <h1>Creación de informe</h1>
+      {% if has_perm('report.create') %}
+      <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
+      </form>
+      {% endif %}
+    </div>
+    <section>
+      <h2>En elaboración / reabiertos</h2>
+      {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
+    </section>
+    <section>
+      <h2>Cerrados pendientes de envío</h2>
+      {{ report_rows(closed, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
+    </section>
+    <section>
+      <h2>Enviados</h2>
+      {{ report_rows(sent, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
+    </section>
+  </div>
+  <aside class="aside">
+    {% if has_perm('report.import') %}
+    <section class="card">
+      <h3>Importar matriz Excel</h3>
+      <p class="small muted">Cree un informe por equipo a partir de un Excel (.xlsx) o CSV. Los encabezados se reconocen por el nombre del campo (Nombre, Dispositivo, Marca, Número de serie, Modelo…).</p>
+      <form method="post" action="{{ url_for('reports.import_matrix') }}" enctype="multipart/form-data" data-busy>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="archivo" class="sr-only">Archivo Excel o CSV</label>
+        <input id="archivo" name="archivo" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required>
+        <button type="submit" class="btn btn-primary btn-block" data-confirm="Se creará un informe por cada fila con datos. ¿Continuar?">Importar y crear informes</button>
+      </form>
+      <p class="small"><a href="{{ url_for('reports.import_template') }}">Descargar plantilla de importación (.xlsx)</a></p>
+    </section>
+    {% endif %}
+    <section class="card">
+      <h3>Autocompletar con una foto</h3>
+      <p class="small muted">Dentro de cada informe use «Tomar foto del equipo»: fotografíe la pantalla de especificaciones (Configuración → Sistema → Acerca de, BIOS, msinfo32) o la etiqueta del equipo. La foto queda anexa y los campos vacíos se completan.</p>
+      <p class="small muted">Consejo: foto de frente, bien iluminada, sin reflejos y con el texto ocupando la mayor parte de la imagen.</p>
+    </section>
+  </aside>
 </div>
-<section>
-  <h2>En elaboración / reabiertos</h2>
-  {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
-</section>
-<section>
-  <h2>Cerrados pendientes de envío</h2>
-  {{ report_rows(closed, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
-</section>
-<section>
-  <h2>Enviados</h2>
-  {{ report_rows(sent, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
-</section>
 {% endblock %}

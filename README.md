@@ -2,14 +2,14 @@
 
 Sistema web para crear, cerrar, enviar, reabrir y consolidar informes de auditoría técnica de hardware, con control de permisos por perfil y un registro de accesos y eventos de solo inserción encadenado con HMAC.
 
-- **Backend:** Python 3.12 + Flask 3.1 (WSGI)
-- **Base de datos:** MySQL 8.4 LTS (PyMySQL, SQL parametrizado, migraciones versionadas)
-- **Frontend:** HTML (Jinja2), CSS y JavaScript sin dependencias externas ni CDN
-- **PDF:** WeasyPrint (HTML → PDF en el servidor)
-- **Sin Node.js / npm**
+- **Backend:** Python 3.12 + Flask 3.1 (WSGI, gunicorn)
+- **Base de datos:** MySQL 8.4 LTS o MariaDB 10.6+ (Hostinger); PyMySQL, SQL parametrizado, migraciones versionadas
+- **Frontend:** HTML (Jinja2), CSS y JavaScript sin CDN; fuente Ubuntu Sans y logo AJ System alojados localmente; adaptable a móviles
+- **Informe:** «Formato de Informe AJ System» idéntico a la plantilla de referencia, con fotos anexas por equipo y **autocompletado** desde una foto (OCR en el navegador con Tesseract.js) o desde una matriz Excel/CSV
+- **PDF:** WeasyPrint (HTML → PDF en el servidor), una hoja + anexo fotográfico
+- **Despliegue:** GitHub → Hostinger (adaptador Node.js sin dependencias, dependencias Python verificadas por hash)
 
-> **Estado:** funcional en local, con 72 pruebas automatizadas aprobadas contra MySQL real.
-> Se despliega en **Hostinger** desde este repositorio de GitHub (aplicación Node.js que arranca la app Python; ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)). Queda **pendiente** la plantilla oficial del PDF y de los campos de auditoría (se usa una provisional mínima).
+> **Estado:** 96 pruebas automatizadas aprobadas contra MySQL 8.4 y contra MariaDB 11.4; auditoría de dependencias sin vulnerabilidades conocidas. Se despliega en **Hostinger** desde este repositorio (ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)).
 
 ## Documentación
 
@@ -50,7 +50,8 @@ docker run -d --name ajsys-mysql-dev -p 127.0.0.1:3307:3306 \
 .venv/bin/flask --app wsgi db-bootstrap
 
 # 5. Primer usuario (responsable administrativo); la contraseña se pide de forma interactiva
-.venv/bin/flask --app wsgi create-user --username responsable --full-name "Nombre Apellido" --role RESPONSABLE
+#    (mínimo 12 caracteres con minúscula, mayúscula, número y símbolo)
+.venv/bin/flask --app wsgi create-user --username responsable --full-name "Nombre Apellido" --role RESPONSABLE --id-number 1020304050
 
 # 6. Ejecutar
 .venv/bin/flask --app wsgi run --debug        # http://127.0.0.1:5000
@@ -64,12 +65,13 @@ En VS Code: abra la carpeta, seleccione el intérprete `.venv` y use las configu
 |---|---|
 | `flask --app wsgi db-bootstrap` | Crea base y cuentas, migra y aplica GRANT (cuenta DBA) |
 | `flask --app wsgi db-migrate` | Aplica migraciones pendientes (haga un respaldo antes) |
-| `flask --app wsgi create-user --username U --full-name N --role ROL` | Alta de usuario por consola (auditada) |
+| `flask --app wsgi create-user --username U --full-name N --role ROL [--id-number CC]` | Alta de usuario por consola (auditada) |
 | `flask --app wsgi set-role-name RESPONSABLE "Nombre visible"` | Cambia el nombre visible de un perfil |
 | `flask --app wsgi verify-audit` | Verifica la cadena de auditoría (sale con 1 si hay alteraciones) |
 | `python scripts/backup.py` | Copia de seguridad comprimida, con suma SHA-256 y manifiesto |
 | `python scripts/restore.py <copia> --target-db <base>` | Restaura y verifica filas y cadena de auditoría |
 | `pytest` | Pruebas automatizadas (requieren MySQL y `AJS_DB_ROOT_PASSWORD`) |
+| `npm run audit:security` | Auditoría de dependencias (pip-audit, npm audit, lock con hashes, integridad SHA-256) |
 
 ## Estructura
 
@@ -84,15 +86,21 @@ ajsystem/                 Paquete de la aplicación
   backup.py               Copias y restauración
   migrations.py, dbadmin.py, cli.py
   reports/schema.py       Campos del informe definidos por plantilla JSON
-  reports/service.py      Máquina de estados del informe
+  reports/service.py      Máquina de estados, visibilidad y solicitudes de reapertura
+  reports/attachments.py  Fotos y firmas (validadas, sin EXIF, guardadas en la base)
+  reports/extract.py      Autocompletado: texto de la foto (OCR) o fila de Excel → campos
+  reports/importer.py     Importación Excel/CSV (un informe por equipo)
   security/               Contraseñas, sesiones, CSRF, autorización, datos del cliente
   web/                    Rutas: auth, home, reports, consolidation, logs, admin
-  templates/, static/     HTML, CSS y JS
-  report_templates/       Definición de campos (provisional_v0.json)
-  document_templates/     Plantilla HTML del PDF (provisional_v0.html)
-migrations/               SQL versionado (0001 esquema, 0002 datos base)
+  templates/, static/     HTML, CSS (app.css, sheet.css) y JS; logo, Ubuntu Sans y motor OCR en static/
+  report_templates/       Campos: aj_v1.json (oficial) y provisional_v0.json (informes antiguos)
+  document_templates/     PDF: aj_v1.html (+ assets/ logo y fuentes)
+hostinger/, server.js     Arranque en Hostinger: integridad, Python verificado por hash, proxy a gunicorn
+migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura)
 sql/grants_app.sql        Privilegios mínimos de la cuenta de la aplicación
-scripts/                  backup.py, restore.py, docker-mysql-tool.sh (solo desarrollo)
+scripts/                  backup.py, restore.py, security_audit.sh, vendor-audit/, docker-mysql-tool.sh (desarrollo)
+.github/                  CI (auditoría + pruebas MySQL/MariaDB) y Dependabot
+requirements.lock         Dependencias con hashes SHA-256 (instalación en Hostinger y CI)
 tests/                    Pruebas con pytest contra MySQL real
 docs/                     Documentación
 ```
@@ -102,6 +110,6 @@ docs/                     Documentación
 1. Toda consulta SQL usa parámetros (`%s`). Nunca concatene valores del usuario.
 2. Toda operación que modifique datos: dentro de `db.transaction()`, con su `audit.write(cur, ...)` en la misma transacción.
 3. Toda ruta nueva: `@require_perm(...)` y, si actúa sobre un informe, la comprobación por recurso de `reports/service.py`.
-4. Los cambios de esquema van en una migración nueva (`migrations/0003_...sql`); las aplicadas no se editan, porque el ejecutor verifica su suma.
+4. Los cambios de esquema van en una migración nueva (`migrations/0004_...sql`); las aplicadas no se editan, porque el ejecutor verifica su suma.
 5. Nada de scripts ni estilos en línea: la CSP los bloquea.
 # informes-ajsystem

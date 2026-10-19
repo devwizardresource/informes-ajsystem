@@ -24,10 +24,11 @@ from pathlib import Path
 
 from . import db
 from .audit import verify_chain
+from .migrations import default_collation
 
 TABLES = ["roles", "permissions", "role_permissions", "users", "sessions", "report_statuses", "report_counters",
           "reports", "report_versions", "report_events", "audit_log", "audit_chain_head", "system_settings",
-          "schema_migrations"]
+          "report_attachments", "reopen_requests", "schema_migrations"]
 _DBNAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
 
@@ -57,7 +58,11 @@ def _defaults_file(settings, user: str, password: str):
 def _counts(conn) -> dict:
     with conn.cursor() as cur:
         out = {}
+        cur.execute("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()")
+        existing = {r["t"] for r in cur.fetchall()}
         for t in TABLES:
+            if t not in existing:  # tablas de migraciones aún no aplicadas
+                continue
             cur.execute(f"SELECT COUNT(*) AS n FROM `{t}`")
             out[t] = cur.fetchone()["n"]
         cur.execute("SELECT last_seq, last_hash FROM audit_chain_head WHERE id = 1")
@@ -79,13 +84,16 @@ def create_backup(settings, user: str, password: str, out_dir: str | None = None
     conn = db.connect(settings, user=user, password=password)
     try:
         manifest = {"database": settings.db_name, "created_utc": stamp, **_counts(conn)}
+        mariadb = default_collation(conn).startswith("utf8mb4_unicode")
     finally:
         conn.close()
 
     with _defaults_file(settings, user, password) as cnf:
         cmd = shlex.split(settings.mysqldump_bin) + [
             f"--defaults-extra-file={cnf}", "--single-transaction", "--routines", "--triggers", "--events",
-            "--no-tablespaces", "--set-gtid-purged=OFF", "--hex-blob", settings.db_name]
+            "--no-tablespaces", "--hex-blob",
+            # Opción exclusiva de mysqldump (MySQL); mariadb-dump (Hostinger) no la reconoce.
+            *([] if mariadb else ["--set-gtid-purged=OFF"]), settings.db_name]
         fd = os.open(dump_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb") as gz:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -128,7 +136,8 @@ def restore_backup(settings, dump_path: str, target_db: str, root_user: str, roo
             cur.execute("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = %s", (target_db,))
             if cur.fetchone()["n"] and not allow_live:
                 raise BackupError("La base destino ya contiene tablas. Elija un destino vacío.")
-            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{target_db}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{target_db}` CHARACTER SET utf8mb4 "
+                        f"COLLATE {default_collation(admin)}")
     finally:
         admin.close()
 

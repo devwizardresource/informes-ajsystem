@@ -1,0 +1,95 @@
+# AJ System · Integración continua: auditoría de la cadena de suministro y pruebas contra MySQL/MariaDB reales.
+# Proteja la rama main exigiendo estos dos trabajos antes de fusionar: Hostinger despliega desde main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"   # cada lunes: detecta vulnerabilidades publicadas después del último cambio
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    name: Auditoría de dependencias
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Instalar dependencias verificadas por hash
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes --only-binary :all: --no-deps -r requirements.lock
+          .venv/bin/pip install pip-audit==2.10.1 uv==0.12.22
+      - name: Auditoría (pip-audit, npm audit, lock e integridad SHA-256)
+        run: bash scripts/security_audit.sh
+
+  tests:
+    name: Pruebas (${{ matrix.db }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - db: "mysql:8.4"
+            dump: "mysqldump"
+            client: "mysql"
+          - db: "mariadb:11.4"   # el motor de Hostinger; respaldos con los clientes de MariaDB
+            dump: "docker run --rm -i --network host -v /tmp:/tmp mariadb:11.4 mariadb-dump"
+            client: "docker run --rm -i --network host -v /tmp:/tmp mariadb:11.4 mariadb"
+    services:
+      db:
+        image: ${{ matrix.db }}
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-password-123
+          MARIADB_ROOT_PASSWORD: ci-root-password-123
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-root-password-123 || healthcheck.sh --connect"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      AJS_ENV: development
+      AJS_SECRET_KEY: ci-secret-key-0123456789-abcdefghijklmnop
+      AJS_AUDIT_HMAC_KEY: ci-hmac-key-0123456789-zyxwvutsrqponmlkj
+      AJS_DB_HOST: 127.0.0.1
+      AJS_DB_PORT: "3306"
+      AJS_DB_SSL: "0"
+      AJS_DB_USER: ajsys_app
+      AJS_DB_ROOT_PASSWORD: ci-root-password-123
+      AJS_TIMEZONE: America/Bogota
+      AJS_MYSQLDUMP_BIN: ${{ matrix.dump }}
+      AJS_MYSQL_BIN: ${{ matrix.client }}
+      TMPDIR: /tmp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bibliotecas del sistema para WeasyPrint
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0
+      - name: Instalar dependencias verificadas por hash
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes --only-binary :all: --no-deps -r requirements.lock
+          .venv/bin/pip install pytest==9.1.1
+      - name: Pruebas
+        run: .venv/bin/pytest -q -p no:warnings

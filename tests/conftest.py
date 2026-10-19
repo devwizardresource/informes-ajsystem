@@ -23,7 +23,7 @@ from ajsystem.config import load_settings  # noqa: E402
 
 TEST_DB = "ajsys_test"
 TEST_APP_USER = "ajsys_test_app"
-PASSWORD = "Clave-de-prueba-2026"
+PASSWORD = "Clave-de-Prueba-2026"
 UA_WINDOWS = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
 
 
@@ -150,10 +150,19 @@ def revision_of(q, report_id: int) -> int:
 
 
 def fill(b: Browser, q, report_id: int, accion="guardar", **fields):
-    data = {"titulo": "Auditoría equipo", "numero_serie": "SN-001", "observaciones": "Sin novedad",
+    data = {"fecha": "2026-10-19", "nombre": "Auditoría equipo", "dispositivo": "Portátil", "marca": "Dell",
+            "numero_serie": "SN-001", "estado": "Activo", "disco": "Sin novedad",
             **fields, "accion": accion, "revision": revision_of(q, report_id), "op_id": new_op()}
     return b.post(f"/informes/{report_id}/guardar", data, csrf_from=f"/informes/{report_id}")
 
 
 def settings_for(app):
     return replace(app.config["AJS_SETTINGS"])
+
+
+@pytest.fixture()
+def app_conn(app):
+    s = app.config["AJS_SETTINGS"]
+    conn = db.connect(s, autocommit=True)  # cuenta de la aplicación, privilegios mínimos
+    yield conn
+    conn.close()

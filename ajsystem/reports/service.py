@@ -1,6 +1,8 @@
 """Ciclo de vida de los informes: máquina de estados controlada en Python y persistida en MySQL.
 
 Estados: EN_ELABORACION → CERRADO → ENVIADO;  CERRADO/ENVIADO → REABIERTO → CERRADO → ...
+Un técnico edita su informe mientras está abierto («Guardar cambios»). Al cerrarlo queda
+bloqueado: para volver a editarlo debe solicitar la reapertura al jefe o al responsable.
 Cada operación crítica se ejecuta en UNA transacción que incluye: bloqueo de la fila del
 informe (SELECT ... FOR UPDATE), comprobación de permisos y estado, cambios, historial
 (report_versions / report_events) y evento de auditoría. Si cualquiera falla, se revierte todo.
@@ -8,9 +10,11 @@ El disparador trg_reports_state_guard repite la validación de transiciones en l
 """
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import re
+from zoneinfo import ZoneInfo
 
 from flask import current_app
 
@@ -56,26 +60,33 @@ def _loads(value):
 # ---------------------------------------------------------------------------
 def visibility_clause(user: dict, alias: str = "r") -> tuple[str, tuple]:
     """Filtro SQL que limita los informes visibles. Se aplica en TODAS las consultas."""
+    if "report.view_all" in user["permissions"]:
+        return "1=1", ()
     if "report.view_sent" in user["permissions"]:
         return f"({alias}.owner_id = %s OR {alias}.first_sent_at IS NOT NULL)", (user["id"],)
     return f"{alias}.owner_id = %s", (user["id"],)
 
 
-def capabilities(report: dict, user: dict) -> dict:
+def capabilities(report: dict, user: dict, pending_request: dict | None = None) -> dict:
     own = report["owner_id"] == user["id"]
-    manage = (own and "report.edit_own" in user["permissions"]) or "report.edit_any" in user["permissions"]
+    perms = user["permissions"]
+    manage = (own and "report.edit_own" in perms) or "report.edit_any" in perms
     status = report["status_code"]
     return {
         "edit": manage and status in EDITABLE,
         "close": manage and status in EDITABLE,
         "send": manage and status == CERRADO,
-        "reopen": "report.reopen" in user["permissions"] and status in CLOSED,
-        "download": "report.download" in user["permissions"],
+        "reopen": "report.reopen" in perms and status in CLOSED,
+        # El autor sin permiso de reapertura la solicita al jefe o al responsable.
+        "request_reopen": (own and "report.request_reopen" in perms and "report.reopen" not in perms
+                           and status in CLOSED and pending_request is None),
+        "resolve_request": "report.reopen" in perms and pending_request is not None and status in CLOSED,
+        "download": "report.download" in perms,
     }
 
 
 _BASE_SELECT = """
-    SELECT r.*, o.username AS owner_username, o.full_name AS owner_name,
+    SELECT r.*, o.username AS owner_username, o.full_name AS owner_name, o.id_number AS owner_id_number,
            ub.full_name AS updated_by_name, cb.full_name AS closed_by_name, sb.full_name AS sent_by_name
       FROM reports r
       JOIN users o ON o.id = r.owner_id
@@ -124,6 +135,10 @@ def _insert_event(cur, report_id, action, from_status, to_status, revision, user
     )
 
 
+def _today() -> dt.date:
+    return dt.datetime.now(ZoneInfo(current_app.config["AJS_SETTINGS"].timezone)).date()
+
+
 def _insert_version(cur, report_id, revision, cols, data, user, now):
     cur.execute(
         """INSERT INTO report_versions (report_id, revision, title, equipment_serial, data, content_sha256,
@@ -138,32 +153,55 @@ def _insert_version(cur, report_id, revision, cols, data, user, now):
 # ---------------------------------------------------------------------------
 # Operaciones
 # ---------------------------------------------------------------------------
+def _create_in(cur, user: dict, template: schema.Template, initial: dict | None, origin: str) -> tuple[int, str]:
+    data = schema.empty_data(template, _today())
+    data.update({k: v for k, v in (initial or {}).items() if k in data and v not in (None, "")})
+    cols = schema.mapped_columns(template, data)
+    prefix = current_app.config["AJS_SETTINGS"].report_code_prefix
+    now = db.utcnow()
+    cur.execute("INSERT INTO report_counters (year, current_value) VALUES (%s, 1) "
+                "ON DUPLICATE KEY UPDATE current_value = current_value + 1", (now.year,))
+    cur.execute("SELECT current_value FROM report_counters WHERE year = %s", (now.year,))
+    code = f"{prefix}-{now.year}-{cur.fetchone()['current_value']:06d}"
+    cur.execute(
+        """INSERT INTO reports (code, owner_id, status_code, template_code, title, equipment_serial, equipment_brand,
+                                data, revision, created_at, updated_at, updated_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s)""",
+        (code, user["id"], EN_ELABORACION, template.code, cols["title"], cols["equipment_serial"],
+         cols["equipment_brand"], json.dumps(data, ensure_ascii=False, sort_keys=True), now, now, user["id"]),
+    )
+    report_id = cur.lastrowid
+    _insert_version(cur, report_id, 1, cols, data, user, now)
+    _insert_event(cur, report_id, "CREAR", None, EN_ELABORACION, 1, user, now,
+                  reason=None if origin == "manual" else f"Creado desde {origin}")
+    audit.write(cur, audit.REPORT_CREATED, "EXITO", object_type="informe", object_id=code,
+                detail={"informe_id": report_id, "plantilla": template.code, "origen": origin})
+    return report_id, code
+
+
 def create(user: dict) -> int:
     if "report.create" not in user["permissions"]:
         raise ReportError("No tiene permiso para crear informes.", status=403)
     template = schema.load_template(current_app.config["AJS_REPORT_TEMPLATE"])
-    data = schema.empty_data(template)
-    cols = schema.mapped_columns(template, data)
-    prefix = current_app.config["AJS_SETTINGS"].report_code_prefix
     with db.transaction() as cur:
-        now = db.utcnow()
-        cur.execute("INSERT INTO report_counters (year, current_value) VALUES (%s, 1) "
-                    "ON DUPLICATE KEY UPDATE current_value = current_value + 1", (now.year,))
-        cur.execute("SELECT current_value FROM report_counters WHERE year = %s", (now.year,))
-        code = f"{prefix}-{now.year}-{cur.fetchone()['current_value']:06d}"
-        cur.execute(
-            """INSERT INTO reports (code, owner_id, status_code, template_code, title, equipment_serial, data,
-                                    revision, created_at, updated_at, updated_by)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s)""",
-            (code, user["id"], EN_ELABORACION, template.code, cols["title"], cols["equipment_serial"],
-             json.dumps(data, ensure_ascii=False, sort_keys=True), now, now, user["id"]),
-        )
-        report_id = cur.lastrowid
-        _insert_version(cur, report_id, 1, cols, data, user, now)
-        _insert_event(cur, report_id, "CREAR", None, EN_ELABORACION, 1, user, now)
-        audit.write(cur, audit.REPORT_CREATED, "EXITO", object_type="informe", object_id=code,
-                    detail={"informe_id": report_id, "plantilla": template.code})
+        report_id, _code = _create_in(cur, user, template, None, "manual")
     return report_id
+
+
+def create_many(user: dict, rows: list[dict], source_name: str) -> list[str]:
+    """Importación: un informe por equipo (fila). Todo o nada, en una sola transacción."""
+    if not {"report.create", "report.import"} <= set(user["permissions"]):
+        raise ReportError("No tiene permiso para importar informes.", status=403)
+    template = schema.load_template(current_app.config["AJS_REPORT_TEMPLATE"])
+    codes = []
+    with db.transaction() as cur:
+        for row in rows:
+            _report_id, code = _create_in(cur, user, template, row, "matriz Excel/CSV")
+            codes.append(code)
+        audit.write(cur, audit.REPORTS_IMPORTED, "EXITO", object_type="importacion", object_id=source_name[:64],
+                    detail={"informes_creados": len(codes), "primero": codes[0] if codes else None,
+                            "ultimo": codes[-1] if codes else None})
+    return codes
 
 
 def _apply_form(cur, report: dict, user: dict, form, expected_revision, now) -> tuple[dict, bool]:
@@ -180,15 +218,17 @@ def _apply_form(cur, report: dict, user: dict, form, expected_revision, now) -> 
     if errors:
         raise ReportError("Revise los campos marcados.", status=422, field_errors=errors, code="validacion")
     cols = schema.mapped_columns(template, data)
-    if data == report["data"] and cols["title"] == report["title"] and cols["equipment_serial"] == report["equipment_serial"]:
+    if (data == report["data"] and cols["title"] == report["title"]
+            and cols["equipment_serial"] == report["equipment_serial"]
+            and cols["equipment_brand"] == report.get("equipment_brand")):
         return report, False
     revision = report["revision"] + 1
     cur.execute(
-        """UPDATE reports SET data = %s, title = %s, equipment_serial = %s, revision = %s,
+        """UPDATE reports SET data = %s, title = %s, equipment_serial = %s, equipment_brand = %s, revision = %s,
                               updated_at = %s, updated_by = %s
             WHERE id = %s AND revision = %s""",
         (json.dumps(data, ensure_ascii=False, sort_keys=True), cols["title"], cols["equipment_serial"],
-         revision, now, user["id"], report["id"], report["revision"]),
+         cols["equipment_brand"], revision, now, user["id"], report["id"], report["revision"]),
     )
     if cur.rowcount != 1:
         raise ReportError("Conflicto de concurrencia al guardar. Recargue la página.", code="conflicto")
@@ -267,33 +307,129 @@ def send(report_id: int, user: dict, idem_key: str | None) -> dict:
     return {"already": False}
 
 
+def _check_reason(reason: str, field: str = "motivo") -> str:
+    reason = (reason or "").strip()
+    if len(reason) < 10 or len(reason) > 1000:
+        raise ReportError("Indique el motivo (entre 10 y 1000 caracteres).", status=422,
+                          field_errors={field: "Motivo obligatorio (10 a 1000 caracteres)."}, code="validacion")
+    return reason
+
+
+def _pending_request(cur, report_id: int) -> dict | None:
+    cur.execute("SELECT * FROM reopen_requests WHERE report_id = %s AND status = 'PENDIENTE' FOR UPDATE", (report_id,))
+    return cur.fetchone()
+
+
+def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row: dict | None = None) -> None:
+    if report["status_code"] not in CLOSED:
+        raise ReportError("Solo se pueden reabrir informes cerrados o enviados.", code="estado")
+    now = db.utcnow()
+    cur.execute("UPDATE reports SET status_code = %s, reopen_count = reopen_count + 1, updated_at = %s, "
+                "updated_by = %s WHERE id = %s AND status_code = %s",
+                (REABIERTO, now, user["id"], report["id"], report["status_code"]))
+    if cur.rowcount != 1:
+        raise ReportError("Conflicto de concurrencia al reabrir.", code="conflicto")
+    _insert_event(cur, report["id"], "REABRIR", report["status_code"], REABIERTO, report["revision"], user, now,
+                  reason=reason, key=key)
+    pending = request_row or _pending_request(cur, report["id"])
+    if pending:  # reabrir resuelve también la solicitud pendiente del técnico
+        cur.execute("UPDATE reopen_requests SET status = 'APROBADA', resolved_by = %s, resolved_at = %s, "
+                    "resolution_note = %s WHERE id = %s AND status = 'PENDIENTE'",
+                    (user["id"], now, reason[:1000], pending["id"]))
+    audit.write(cur, audit.REPORT_REOPENED, "EXITO", object_type="informe", object_id=report["code"],
+                detail={"informe_id": report["id"], "estado_anterior": report["status_code"],
+                        "estado_nuevo": REABIERTO, "motivo": reason, "operacion": "reapertura autorizada",
+                        "solicitud_id": pending["id"] if pending else None})
+
+
 def reopen(report_id: int, user: dict, reason: str, idem_key: str | None) -> dict:
     """Reapertura autorizada (solo responsable administrativo y jefe), con motivo obligatorio."""
     key = _check_idem(idem_key)
     if "report.reopen" not in user["permissions"]:
         raise ReportError("No tiene permiso para reabrir informes.", status=403)
-    reason = (reason or "").strip()
-    if len(reason) < 10 or len(reason) > 1000:
-        raise ReportError("Indique el motivo de la reapertura (entre 10 y 1000 caracteres).", status=422,
-                          field_errors={"motivo": "Motivo obligatorio (10 a 1000 caracteres)."}, code="validacion")
+    reason = _check_reason(reason)
     with db.transaction() as cur:
         report = _lock_visible(cur, report_id, user)
         if _event_exists(cur, report_id, "REABRIR", key):
             return {"already": True}
-        if report["status_code"] not in CLOSED:
-            raise ReportError("Solo se pueden reabrir informes cerrados o enviados.", code="estado")
-        now = db.utcnow()
-        cur.execute("UPDATE reports SET status_code = %s, reopen_count = reopen_count + 1, updated_at = %s, "
-                    "updated_by = %s WHERE id = %s AND status_code = %s",
-                    (REABIERTO, now, user["id"], report_id, report["status_code"]))
-        if cur.rowcount != 1:
-            raise ReportError("Conflicto de concurrencia al reabrir.", code="conflicto")
-        _insert_event(cur, report_id, "REABRIR", report["status_code"], REABIERTO, report["revision"], user, now,
-                      reason=reason, key=key)
-        audit.write(cur, audit.REPORT_REOPENED, "EXITO", object_type="informe", object_id=report["code"],
-                    detail={"informe_id": report_id, "estado_anterior": report["status_code"],
-                            "estado_nuevo": REABIERTO, "motivo": reason, "operacion": "reapertura autorizada"})
+        _reopen_in(cur, report, user, reason, key)
     return {"already": False}
+
+
+def request_reopen(report_id: int, user: dict, reason: str, idem_key: str | None) -> dict:
+    """El técnico autor pide permiso para volver a editar su informe cerrado."""
+    key = _check_idem(idem_key)
+    if "report.request_reopen" not in user["permissions"]:
+        raise ReportError("No tiene permiso para solicitar reaperturas.", status=403)
+    reason = _check_reason(reason)
+    with db.transaction() as cur:
+        report = _lock_visible(cur, report_id, user)
+        if _event_exists(cur, report_id, "SOLICITAR_REAPERTURA", key):
+            return {"already": True}
+        if report["owner_id"] != user["id"]:
+            raise ReportError("Solo el autor puede solicitar la reapertura de su informe.", status=403)
+        if report["status_code"] not in CLOSED:
+            raise ReportError("El informe sigue abierto: puede editarlo directamente.", code="estado")
+        if _pending_request(cur, report_id):
+            raise ReportError("Ya hay una solicitud de reapertura pendiente para este informe.", code="duplicado")
+        now = db.utcnow()
+        cur.execute("INSERT INTO reopen_requests (report_id, requested_by, reason, created_at) VALUES (%s, %s, %s, %s)",
+                    (report_id, user["id"], reason, now))
+        request_id = cur.lastrowid
+        _insert_event(cur, report_id, "SOLICITAR_REAPERTURA", report["status_code"], report["status_code"],
+                      report["revision"], user, now, reason=reason, key=key)
+        audit.write(cur, audit.REOPEN_REQUESTED, "EXITO", object_type="informe", object_id=report["code"],
+                    detail={"informe_id": report_id, "solicitud_id": request_id, "motivo": reason})
+    return {"already": False}
+
+
+def resolve_request(report_id: int, user: dict, approve: bool, note: str, idem_key: str | None) -> dict:
+    """El jefe o el responsable aprueban (reabre el informe) o rechazan la solicitud pendiente."""
+    key = _check_idem(idem_key)
+    if "report.reopen" not in user["permissions"]:
+        raise ReportError("No tiene permiso para resolver solicitudes de reapertura.", status=403)
+    with db.transaction() as cur:
+        report = _lock_visible(cur, report_id, user)
+        action = "REABRIR" if approve else "RECHAZAR_REAPERTURA"
+        if _event_exists(cur, report_id, action, key):
+            return {"already": True}
+        pending = _pending_request(cur, report_id)
+        if pending is None:
+            raise ReportError("No hay una solicitud de reapertura pendiente para este informe.", code="estado")
+        if approve:
+            note = (note or "").strip() or f"Solicitud aprobada: {pending['reason']}"
+            _reopen_in(cur, report, user, _check_reason(note[:1000], "nota"), key, pending)
+        else:
+            note = _check_reason(note, "nota")
+            now = db.utcnow()
+            cur.execute("UPDATE reopen_requests SET status = 'RECHAZADA', resolved_by = %s, resolved_at = %s, "
+                        "resolution_note = %s WHERE id = %s AND status = 'PENDIENTE'",
+                        (user["id"], now, note, pending["id"]))
+            _insert_event(cur, report_id, "RECHAZAR_REAPERTURA", report["status_code"], report["status_code"],
+                          report["revision"], user, now, reason=note, key=key)
+            audit.write(cur, audit.REOPEN_REJECTED, "EXITO", object_type="informe", object_id=report["code"],
+                        detail={"informe_id": report_id, "solicitud_id": pending["id"], "nota": note})
+    return {"already": False}
+
+
+def pending_request_for(report_id: int) -> dict | None:
+    return db.query_one(
+        """SELECT q.id, q.reason, q.created_at, u.full_name AS requested_by_name
+             FROM reopen_requests q JOIN users u ON u.id = q.requested_by
+            WHERE q.report_id = %s AND q.status = 'PENDIENTE'""", (report_id,))
+
+
+def pending_requests(user: dict, limit: int = 20) -> list[dict]:
+    """Solicitudes pendientes visibles para quien puede resolverlas (más antiguas primero)."""
+    if "report.reopen" not in user["permissions"]:
+        return []
+    clause, params = visibility_clause(user)
+    return db.query_all(
+        f"""SELECT q.id, q.reason, q.created_at, r.id AS report_id, r.code, r.title, r.equipment_brand,
+                   r.equipment_serial, u.full_name AS requested_by_name
+              FROM reopen_requests q JOIN reports r ON r.id = q.report_id JOIN users u ON u.id = q.requested_by
+             WHERE q.status = 'PENDIENTE' AND {clause}
+             ORDER BY q.created_at LIMIT %s""", (*params, limit))
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +453,8 @@ def versions(report_id: int) -> list[dict]:
 def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dict]:
     placeholders = ",".join(["%s"] * len(statuses))
     return db.query_all(
-        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.status_code, r.revision, r.updated_at,
-                   r.closed_at, r.last_sent_at, r.reopen_count
+        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.revision,
+                   r.created_at, r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count
               FROM reports r WHERE r.owner_id = %s AND r.status_code IN ({placeholders})
              ORDER BY r.updated_at DESC LIMIT %s""", (user["id"], *statuses, limit))
 
@@ -333,6 +469,9 @@ def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[d
     if filters.get("owner_id"):
         where.append("r.owner_id = %s")
         args.append(filters["owner_id"])
+    if filters.get("brand"):
+        where.append("r.equipment_brand LIKE %s")
+        args.append(f"%{_like_escape(filters['brand'])}%")
     if filters.get("serial"):
         where.append("r.equipment_serial LIKE %s")
         args.append(f"%{_like_escape(filters['serial'])}%")
@@ -347,15 +486,32 @@ def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[d
         where.append(f"{date_col} < %s")
         args.append(filters["to_utc"])
     where_sql = " AND ".join(where)
+    order = SORTS.get(filters.get("sort"), SORTS["recientes"])
     total = db.query_one(f"SELECT COUNT(*) AS n FROM reports r WHERE {where_sql}", tuple(args))["n"]
     rows = db.query_all(
-        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.status_code, r.created_at, r.updated_at,
-                   r.closed_at, r.last_sent_at, r.reopen_count, o.full_name AS owner_name, o.username AS owner_username
+        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.created_at,
+                   r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count, o.full_name AS owner_name,
+                   o.username AS owner_username
               FROM reports r JOIN users o ON o.id = r.owner_id
              WHERE {where_sql}
-             ORDER BY r.updated_at DESC, r.id DESC LIMIT %s OFFSET %s""",
+             ORDER BY {order} LIMIT %s OFFSET %s""",
         (*args, page_size, (page - 1) * page_size))
     return rows, total
+
+
+# Ordenaciones permitidas (lista blanca). «marca» agrupa los equipos por marca y número de serie.
+SORTS = {
+    "recientes": "r.updated_at DESC, r.id DESC",
+    "cronologico": "r.created_at ASC, r.id ASC",
+    "marca": "r.equipment_brand IS NULL, r.equipment_brand ASC, r.equipment_serial ASC, r.created_at ASC",
+}
+
+
+def brands(user: dict) -> list[str]:
+    clause, params = visibility_clause(user)
+    return [r["b"] for r in db.query_all(
+        f"""SELECT DISTINCT r.equipment_brand AS b FROM reports r
+             WHERE {clause} AND r.equipment_brand IS NOT NULL ORDER BY b LIMIT 200""", params)]
 
 
 def summary(user: dict) -> dict:
@@ -369,8 +525,8 @@ def summary(user: dict) -> dict:
 def recent_sent(user: dict, limit: int = 15) -> list[dict]:
     clause, params = visibility_clause(user)
     return db.query_all(
-        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.status_code, r.last_sent_at, r.reopen_count,
-                   o.full_name AS owner_name
+        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.last_sent_at,
+                   r.reopen_count, o.full_name AS owner_name
               FROM reports r JOIN users o ON o.id = r.owner_id
              WHERE {clause} AND r.status_code = %s
              ORDER BY r.last_sent_at DESC LIMIT %s""", (*params, ENVIADO, limit))

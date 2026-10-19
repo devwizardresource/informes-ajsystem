@@ -5,7 +5,8 @@
   "description": "AJ System (Flask + MySQL) empaquetado para el despliegue Node.js de Hostinger: server.js prepara Python y hace de proxy hacia gunicorn.",
   "main": "server.js",
   "scripts": {
-    "build": "node hostinger/python-env.js",
+    "build": "node hostinger/integrity.js && node hostinger/python-env.js",
+    "audit:security": "bash scripts/security_audit.sh",
     "start": "node server.js"
   },
   "engines": {

@@ -1,0 +1,70 @@
+{
+  "code": "aj_v1",
+  "name": "Formato de Informe AJ System",
+  "provisional": false,
+  "notice": "",
+  "document_template": "aj_v1.html",
+  "sections": [
+    {
+      "id": "encabezado",
+      "title": "",
+      "fields": [
+        {"id": "fecha", "label": "Fecha:", "type": "date", "required_on_close": true, "default": "today"},
+        {"id": "nombre", "label": "Nombre:", "type": "text", "max_length": 200, "required_on_close": true, "maps_to": "title", "placeholder": "Nombre del equipo / cliente"},
+        {"id": "lugar", "label": "Lugar donde se realizó el informe:", "type": "text", "max_length": 200, "placeholder": "Sede, ciudad"},
+        {"id": "direccion", "label": "Dirección específica:", "type": "text", "max_length": 200, "placeholder": "Dirección, piso, sala"}
+      ]
+    },
+    {
+      "id": "inventario",
+      "number": 1,
+      "title": "INFORME DE INVENTARIO Y CONCILIACIÓN",
+      "fields": [
+        {"id": "dispositivo", "label": "Dispositivo:", "type": "text", "max_length": 120, "required_on_close": true},
+        {"id": "marca", "label": "Marca:", "type": "text", "max_length": 100, "required_on_close": true, "maps_to": "equipment_brand"},
+        {"id": "numero_serie", "label": "Número de serie:", "type": "text", "max_length": 100, "required_on_close": true, "maps_to": "equipment_serial"},
+        {"id": "modelo", "label": "Modelo:", "type": "text", "max_length": 120},
+        {"id": "ubicacion", "label": "Ubicación física:", "type": "text", "max_length": 200},
+        {"id": "responsable", "label": "Responsable asignado:", "type": "text", "max_length": 120},
+        {"id": "estado", "label": "Estado:", "type": "select", "widget": "radio", "options": ["Activo", "En reparación", "Obsoleto"], "required_on_close": true}
+      ]
+    },
+    {
+      "id": "tecnico",
+      "number": 2,
+      "title": "INFORME TÉCNICO DEL ESTADO FÍSICO Y FUNCIONAL",
+      "fields": [
+        {"id": "disco", "label": "Diagnóstico de desgaste / vida útil estimada del disco duro:", "type": "textarea", "max_length": 2000},
+        {"id": "ram", "label": "Estado de memoria RAM:", "type": "textarea", "max_length": 2000},
+        {"id": "procesadores", "label": "Procesadores:", "type": "textarea", "max_length": 2000},
+        {"id": "fuente_poder", "label": "Fuente de poder:", "type": "textarea", "max_length": 2000},
+        {"id": "ventiladores", "label": "Ventiladores:", "type": "textarea", "max_length": 2000},
+        {"id": "temperatura", "label": "Temperatura de operación:", "type": "textarea", "max_length": 2000}
+      ]
+    },
+    {
+      "id": "seguridad",
+      "number": 3,
+      "title": "INFORME DE SEGURIDAD Y CONTROL DE ACCESO FÍSICO",
+      "fields": [
+        {"id": "proteccion_robos", "label": "Medidas de protección contra robos:", "type": "textarea", "max_length": 2000},
+        {"id": "climatizacion", "label": "Sistema de climatización:", "type": "textarea", "max_length": 2000},
+        {"id": "control_acceso", "label": "Control de acceso a los centros de datos:", "type": "textarea", "max_length": 2000},
+        {"id": "contra_incendios", "label": "Sistema contra incendios:", "type": "textarea", "max_length": 2000},
+        {"id": "respaldo_electrico", "label": "Respaldo eléctrico:", "type": "textarea", "max_length": 2000}
+      ]
+    },
+    {
+      "id": "cumplimiento",
+      "number": 4,
+      "title": "INFORME DE CUMPLIMIENTO Y ESTANDARIZACIÓN",
+      "fields": [
+        {"id": "config_minimas", "label": "Validación de configuraciones mínimas requeridas:", "type": "textarea", "max_length": 2000},
+        {"id": "parches_firmware", "label": "Parches de firmware:", "type": "textarea", "max_length": 2000},
+        {"id": "politicas_reemplazo", "label": "Políticas de reemplazo:", "type": "textarea", "max_length": 2000},
+        {"id": "normas_seguridad", "label": "Normas de seguridad:", "type": "textarea", "max_length": 2000},
+        {"id": "normas_ambientales", "label": "Normas medioambientales:", "type": "textarea", "max_length": 2000}
+      ]
+    }
+  ]
+}

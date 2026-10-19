@@ -41,6 +41,8 @@ def index():
     filters = {
         "code": args.get("codigo", "").strip()[:40],
         "serial": args.get("serie", "").strip()[:100],
+        "brand": args.get("marca", "").strip()[:100],
+        "sort": args.get("orden") if args.get("orden") in service.SORTS else "recientes",
         "status": args.get("estado") if args.get("estado") in service.STATUS_LABELS else "",
         "date_field": "sent" if args.get("fecha_por") == "sent" else "created",
         "desde": args.get("desde", ""),
@@ -57,4 +59,4 @@ def index():
     rows, total = service.search(g.user, filters, page, settings.page_size)
     pages = max(1, math.ceil(total / settings.page_size))
     return render_template("consolidation.html", rows=rows, total=total, page=page, pages=pages,
-                           filters=filters, owners=users.technicians_and_owners())
+                           filters=filters, owners=users.technicians_and_owners(), brands=service.brands(g.user))

@@ -18,7 +18,7 @@ def test_datos_persisten_tras_reiniciar_la_aplicacion(app, overrides, make_user,
     b = Browser(app)
     b.login(t)
     rid = create_report(b)
-    fill(b, q, rid, titulo="Sobrevive al reinicio")
+    fill(b, q, rid, nombre="Sobrevive al reinicio")
     # Proceso nuevo e independiente (otro intérprete): nada depende de la memoria del proceso anterior.
     code = f"""
 import sys; sys.path.insert(0, {str(ROOT)!r}); sys.path.insert(0, {str(ROOT / 'tests')!r})
@@ -39,7 +39,7 @@ print('OK')
 def test_reversion_si_falla_la_auditoria_durante_el_cierre(app, browser, make_user, q, monkeypatch):
     b = browser(make_user("TECNICO"))
     rid = create_report(b)
-    fill(b, q, rid, titulo="Antes")
+    fill(b, q, rid, nombre="Antes")
     rev = q("SELECT revision FROM reports WHERE id=%s", (rid,))[0]["revision"]
     original = audit.write
 
@@ -49,7 +49,7 @@ def test_reversion_si_falla_la_auditoria_durante_el_cierre(app, browser, make_us
         return original(cur, event_type, *a, **kw)
 
     monkeypatch.setattr(audit, "write", failing)
-    r = fill(b, q, rid, accion="cerrar", titulo="Después")
+    r = fill(b, q, rid, accion="cerrar", nombre="Después")
     assert r.status_code == 500
     row = q("SELECT status_code, revision, title FROM reports WHERE id=%s", (rid,))[0]
     assert row == {"status_code": "EN_ELABORACION", "revision": rev, "title": "Antes"}
@@ -85,7 +85,7 @@ def test_copia_y_restauracion(app, settings, browser, make_user, q, root_conn_fa
     t = make_user("TECNICO")
     b = browser(t)
     rid = create_report(b)
-    fill(b, q, rid, accion="cerrar", titulo="Respaldado")
+    fill(b, q, rid, accion="cerrar", nombre="Respaldado")
     s = app.config["AJS_SETTINGS"]
     dump = create_backup(s, "root", os.environ["AJS_DB_ROOT_PASSWORD"], str(tmp_path), log=lambda *_: None)
     assert oct(dump.stat().st_mode & 0o777) == "0o600"
@@ -101,7 +101,7 @@ def test_copia_y_restauracion(app, settings, browser, make_user, q, root_conn_fa
         cur.execute("SELECT title, status_code FROM reports WHERE id = %s", (rid,))
         assert cur.fetchone() == {"title": "Respaldado", "status_code": "CERRADO"}
         cur.execute("SELECT COUNT(*) AS n FROM information_schema.triggers WHERE trigger_schema = %s", (target,))
-        assert cur.fetchone()["n"] == 8  # los disparadores de integridad también se restauran
+        assert cur.fetchone()["n"] == 13  # los disparadores de integridad también se restauran
         cur.execute(f"DROP DATABASE `{target}`")
     conn.close()
 

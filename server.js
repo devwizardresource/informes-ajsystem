@@ -5,7 +5,8 @@
  * La aplicación real es Flask (Python). Este proceso:
  *   1. escucha de inmediato en process.env.PORT (Hostinger lo exige) y muestra una página
  *      de «iniciando» mientras se prepara el backend;
- *   2. prepara el entorno Python (hostinger/python-env.js);
+ *   2. verifica la integridad de los recursos de terceros y prepara el entorno Python
+ *      (hostinger/integrity.js y hostinger/python-env.js, dependencias verificadas por hash);
  *   3. aplica migraciones pendientes y crea el primer usuario si así se configura;
  *   4. arranca gunicorn en 127.0.0.1 (puerto interno) y le reenvía todo el tráfico.
  *
@@ -17,6 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { ensurePythonEnv, ROOT, log } = require("./hostinger/python-env");
+const { verifyVendorIntegrity } = require("./hostinger/integrity");
 
 const PORT = Number(process.env.PORT || 3000);
 // Proxies de confianza delante de este proceso (el de Hostinger que termina TLS).
@@ -107,6 +109,7 @@ function startGunicorn(py) {
 
 async function boot() {
   try {
+    log(`${verifyVendorIntegrity()} archivos de terceros verificados (SHA-256).`);
     const py = ensurePythonEnv();
     if (process.env.AJS_AUTO_MIGRATE !== "0") {
       const migrator = process.env.AJS_DB_ADMIN_USER || process.env.AJS_DB_USER;

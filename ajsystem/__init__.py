@@ -52,14 +52,15 @@ def create_app(overrides: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
         AJS_SETTINGS=settings,
-        AJS_REPORT_TEMPLATE=os.environ.get("AJS_REPORT_TEMPLATE", "provisional_v0"),
+        AJS_REPORT_TEMPLATE=os.environ.get("AJS_REPORT_TEMPLATE", "aj_v1"),
         SECRET_KEY=settings.secret_key,
         # La cookie de Flask solo transporta mensajes flash (sin datos sensibles).
         SESSION_COOKIE_NAME="ajs_flash",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SECURE=settings.cookie_secure,
         SESSION_COOKIE_SAMESITE="Lax",
-        MAX_CONTENT_LENGTH=1 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=1 * 1024 * 1024,  # fotos e importaciones lo amplían por ruta (ver _before)
+        SEND_FILE_MAX_AGE_DEFAULT=31536000,  # estáticos versionados (?v=) en caché un año
         TEMPLATES_AUTO_RELOAD=not settings.is_production,
     )
     schema.load_template(app.config["AJS_REPORT_TEMPLATE"])  # falla al arrancar si la plantilla es inválida
@@ -77,10 +78,14 @@ def create_app(overrides: dict | None = None) -> Flask:
     for bp in (auth.bp, home.bp, reports.bp, consolidation.bp, logs.bp, admin.bp):
         app.register_blueprint(bp)
 
+    from .web.reports import UPLOAD_ENDPOINTS  # noqa: PLC0415
+
     @app.before_request
     def _before():
         if request.endpoint == "static":
             return None
+        if request.endpoint in UPLOAD_ENDPOINTS:
+            request.max_content_length = 16 * 1024 * 1024
         sessions.load_current_session()
         if not csrf.is_valid():
             audit.write_standalone(audit.CSRF_FAILED, "DENEGADO",
@@ -93,16 +98,23 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     @app.after_request
     def _headers(response):
+        # El reconocimiento de texto (OCR) compila WebAssembly en el navegador: solo la página del
+        # informe y los archivos del motor OCR admiten 'wasm-unsafe-eval' (nunca 'unsafe-eval').
+        ocr = request.endpoint == "reports.detail" or request.path.startswith("/static/vendor/tesseract/")
+        script_src = "'self' 'wasm-unsafe-eval'" if ocr else "'self'"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+            f"default-src 'self'; script-src {script_src}; "
+            "style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; "
             "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "same-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()"
         if settings.cookie_secure:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.endpoint != "static":
+        if request.endpoint == "static":
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         return csrf.attach_pre_cookie(response)
 
