@@ -1,0 +1,19 @@
+# Secretos y datos locales
+.env
+.env.*
+!.env.example
+backups/
+*.sql.gz
+*.manifest.json
+*.sha256
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Editor / SO
+.DS_Store
+Thumbs.db
+*.swp

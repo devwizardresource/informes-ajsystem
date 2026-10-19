@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import pagination with context %}
+{% block title %}Registro detallado{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Registro detallado</h1>
+  {% if has_perm('audit.verify') %}
+  <form method="post" action="{{ url_for('logs.verify') }}" class="inline" data-busy>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn">Verificar integridad</button>
+  </form>
+  {% endif %}
+</div>
+<p class="muted small">Registro de solo lectura. Las horas se muestran en la zona horaria configurada; la IP es la observada por el servidor y el sistema operativo es el reportado por el navegador (no verificable).</p>
+
+<form class="card filters" method="get" action="{{ url_for('logs.index') }}">
+  <div><label for="tipo">Evento</label><select id="tipo" name="tipo"><option value="">Todos</option>
+    {% for t in types %}<option value="{{ t }}" {% if f.tipo == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div><label for="usuario">Usuario</label><input id="usuario" name="usuario" value="{{ f.usuario }}" maxlength="64"></div>
+  <div><label for="resultado">Resultado</label><select id="resultado" name="resultado"><option value="">Todos</option>
+    {% for o in outcomes %}<option value="{{ o }}" {% if f.resultado == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label for="ip">IP</label><input id="ip" name="ip" value="{{ f.ip }}" maxlength="45"></div>
+  <div><label for="desde">Desde</label><input id="desde" name="desde" type="date" value="{{ f.desde }}"></div>
+  <div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="date" value="{{ f.hasta }}"></div>
+  <div class="filter-actions"><button type="submit" class="btn btn-primary">Filtrar</button> <a class="btn btn-ghost" href="{{ url_for('logs.index') }}">Limpiar</a></div>
+</form>
+
+<p class="muted">{{ total }} evento(s).</p>
+<div class="table-wrap">
+<table class="table table-dense">
+  <thead><tr><th scope="col">N.º</th><th scope="col">Fecha y hora</th><th scope="col">Evento</th><th scope="col">Resultado</th><th scope="col">Usuario</th><th scope="col">Rol</th><th scope="col">IP</th><th scope="col">S. O. reportado</th><th scope="col">Sesión</th><th scope="col">Objeto</th><th scope="col">Detalle</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td data-label="N.º">{{ r.seq }}</td>
+      <td data-label="Fecha y hora" class="nowrap">{{ r.occurred_at|localdt('%Y-%m-%d %H:%M:%S') }}</td>
+      <td data-label="Evento">{{ r.event_type }}</td>
+      <td data-label="Resultado"><span class="badge badge-out-{{ r.outcome|lower }}">{{ r.outcome }}</span></td>
+      <td data-label="Usuario">{{ r.username or '—' }}</td>
+      <td data-label="Rol">{{ r.role_code or '—' }}</td>
+      <td data-label="IP">{{ r.ip or '—' }}</td>
+      <td data-label="S. O.">{{ r.os_reported or '—' }}</td>
+      <td data-label="Sesión"><code>{{ (r.session_public_id or '')[:8] }}</code></td>
+      <td data-label="Objeto">{% if r.object_type %}{{ r.object_type }}: {{ r.object_id }}{% endif %}</td>
+      <td data-label="Detalle" class="detail">{% for k, v in r.detail.items() %}<div><strong>{{ k }}:</strong> {{ v }}</div>{% endfor %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="muted">Sin eventos.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pagination(page, pages, 'logs.index') }}
+{% endblock %}

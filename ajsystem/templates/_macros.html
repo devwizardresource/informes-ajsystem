@@ -1,0 +1,36 @@
+{% macro status_badge(code) -%}
+<span class="badge badge-{{ code|lower }}">{{ STATUS_LABELS.get(code, code) }}</span>
+{%- endmacro %}
+
+{% macro pagination(page, pages, endpoint) -%}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Paginación">
+  {% set args = request.args.to_dict() %}
+  {% if page > 1 %}{% set _ = args.update({'page': page - 1}) %}<a class="btn btn-ghost btn-sm" href="{{ url_for(endpoint, **args) }}">« Anterior</a>{% endif %}
+  <span>Página {{ page }} de {{ pages }}</span>
+  {% if page < pages %}{% set _ = args.update({'page': page + 1}) %}<a class="btn btn-ghost btn-sm" href="{{ url_for(endpoint, **args) }}">Siguiente »</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro report_rows(rows, show_owner=false, date_label='Actualizado', date_field='updated_at', empty='No hay informes.') -%}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th scope="col">Identificador</th><th scope="col">Título</th>{% if show_owner %}<th scope="col">Técnico</th>{% endif %}<th scope="col">Estado</th><th scope="col">{{ date_label }}</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td data-label="Identificador"><code>{{ r.code }}</code>{% if r.reopen_count %} <small class="muted">({{ r.reopen_count }} reap.)</small>{% endif %}</td>
+      <td data-label="Título">{{ r.title or '— sin título —' }}</td>
+      {% if show_owner %}<td data-label="Técnico">{{ r.owner_name }}</td>{% endif %}
+      <td data-label="Estado">{{ status_badge(r.status_code) }}</td>
+      <td data-label="{{ date_label }}">{{ r[date_field]|localdt }}</td>
+      <td><a class="btn btn-sm" href="{{ url_for('reports.detail', report_id=r.id) }}">Abrir</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="{{ 6 if show_owner else 5 }}" class="muted">{{ empty }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{%- endmacro %}

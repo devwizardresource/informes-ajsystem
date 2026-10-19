@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe {{ doc.meta.codigo }}</title>
+<style>
+  /* PLANTILLA PROVISIONAL: sin logos ni identidad institucional. Se sustituirá por la plantilla oficial. */
+  @page {
+    size: A4; margin: 18mm 16mm 20mm 16mm;
+    @bottom-left { content: "{{ doc.meta.codigo }} · rev. {{ doc.meta.revision }}"; font-size: 8pt; color: #555; }
+    @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #555; }
+  }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10pt; color: #111; }
+  .aviso { border: 1px dashed #999; padding: 6px 8px; font-size: 8.5pt; color: #444; margin-bottom: 10px; }
+  h1 { font-size: 15pt; margin: 0 0 4px; }
+  h2 { font-size: 11.5pt; border-bottom: 1px solid #333; padding-bottom: 2px; margin: 16px 0 6px; page-break-after: avoid; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; vertical-align: top; padding: 4px 6px; border: 1px solid #ccc; }
+  th { background: #f1f1f1; width: 32%; font-weight: 600; }
+  tr { page-break-inside: avoid; }
+  .valor { white-space: pre-wrap; word-wrap: break-word; }
+  .meta td, .meta th { font-size: 9pt; }
+  .hist th { width: auto; }
+  .huella { font-family: "DejaVu Sans Mono", monospace; font-size: 7.5pt; word-break: break-all; }
+</style>
+</head>
+<body>
+  {% if doc.plantilla.provisional %}
+  <div class="aviso">Documento generado con la plantilla provisional del sistema. El diseño institucional definitivo está pendiente.</div>
+  {% endif %}
+  <h1>Informe de auditoría técnica {{ doc.meta.codigo }}</h1>
+
+  <table class="meta">
+    <tr><th>Estado</th><td>{{ doc.meta.estado }}</td><th>Revisión</th><td>{{ doc.meta.revision }}</td></tr>
+    <tr><th>Elaborado por</th><td>{{ doc.meta.autor }}</td><th>Creado</th><td>{{ doc.meta.creado }}</td></tr>
+    <tr><th>Cerrado por</th><td>{{ doc.meta.cerrado_por }}</td><th>Cerrado</th><td>{{ doc.meta.cerrado }}</td></tr>
+    <tr><th>Enviado por</th><td>{{ doc.meta.enviado_por }}</td><th>Enviado</th><td>{{ doc.meta.enviado }}</td></tr>
+  </table>
+
+  {% for seccion in doc.secciones %}
+  <h2>{{ seccion.titulo }}</h2>
+  <table>
+    {% for campo in seccion.campos %}
+    <tr><th>{{ campo.etiqueta }}</th><td class="valor">{{ campo.valor }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+
+  <h2>Trazabilidad</h2>
+  <table class="hist">
+    <tr><th>Fecha</th><th>Acción</th><th>Usuario</th><th>Estado</th><th>Rev.</th><th>Motivo</th></tr>
+    {% for h in doc.historial %}
+    <tr><td>{{ h.fecha }}</td><td>{{ h.accion }}</td><td>{{ h.usuario }}</td><td>{{ h.estado }}</td><td>{{ h.revision }}</td><td class="valor">{{ h.motivo }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <p class="huella">Huella SHA-256 del contenido: {{ doc.meta.huella }}<br>
+  Generado el {{ doc.meta.generado }} ({{ doc.meta.zona_horaria }}) por {{ doc.meta.generado_por }}.</p>
+</body>
+</html>

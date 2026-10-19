@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<h1>Usuarios y roles</h1>
+
+<section class="card">
+  <h2>Usuarios</h2>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">Rol</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td data-label="Usuario"><code>{{ u.username }}</code></td>
+        <td data-label="Nombre">{{ u.full_name }}{% if u.email %}<br><small class="muted">{{ u.email }}</small>{% endif %}</td>
+        <td data-label="Rol">
+          <form method="post" action="{{ url_for('admin.users_role', user_id=u.id) }}" class="inline" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="sr-only" for="rol-{{ u.id }}">Rol de {{ u.username }}</label>
+            <select id="rol-{{ u.id }}" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if r.code == u.role_code %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
+            <button type="submit" class="btn btn-sm" data-confirm="¿Cambiar el rol de {{ u.username }}? Se cerrarán sus sesiones abiertas.">Aplicar</button>
+          </form>
+        </td>
+        <td data-label="Estado">{{ 'Activo' if u.is_active else 'Inactivo' }}{% if u.must_change_password %}<br><small class="muted">debe cambiar contraseña</small>{% endif %}</td>
+        <td data-label="Último acceso">{{ u.last_login_at|localdt }}</td>
+        <td data-label="Acciones">
+          {% if u.id != current_user.id %}
+          <form method="post" action="{{ url_for('admin.users_status', user_id=u.id) }}" class="inline" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="activo" value="{{ '0' if u.is_active else '1' }}">
+            <button type="submit" class="btn btn-sm btn-ghost" data-confirm="¿{{ 'Desactivar' if u.is_active else 'Activar' }} la cuenta {{ u.username }}?">{{ 'Desactivar' if u.is_active else 'Activar' }}</button>
+          </form>
+          <details class="inline-details"><summary>Restablecer contraseña</summary>
+            <form method="post" action="{{ url_for('admin.users_password', user_id=u.id) }}" data-busy>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label for="pw-{{ u.id }}">Contraseña temporal (mín. 12)</label>
+              <input id="pw-{{ u.id }}" name="password" type="password" minlength="12" autocomplete="new-password" required>
+              <button type="submit" class="btn btn-sm" data-confirm="¿Restablecer la contraseña de {{ u.username }}?">Restablecer</button>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Crear usuario</h2>
+  <form method="post" action="{{ url_for('admin.users_create') }}" class="grid-form" data-busy>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div><label for="n-username">Usuario</label><input id="n-username" name="username" required maxlength="64" value="{{ form.username or '' }}">
+      {% if errors.username %}<p class="field-error">{{ errors.username }}</p>{% endif %}</div>
+    <div><label for="n-full">Nombre completo</label><input id="n-full" name="full_name" required maxlength="120" value="{{ form.full_name or '' }}">
+      {% if errors.full_name %}<p class="field-error">{{ errors.full_name }}</p>{% endif %}</div>
+    <div><label for="n-email">Correo (opcional)</label><input id="n-email" name="email" type="email" maxlength="190" value="{{ form.email or '' }}">
+      {% if errors.email %}<p class="field-error">{{ errors.email }}</p>{% endif %}</div>
+    <div><label for="n-role">Rol</label><select id="n-role" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if form.role_id == r.id|string %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
+      {% if errors.role_id %}<p class="field-error">{{ errors.role_id }}</p>{% endif %}</div>
+    <div><label for="n-pw">Contraseña temporal (mín. 12)</label><input id="n-pw" name="password" type="password" minlength="12" autocomplete="new-password" required>
+      {% if errors.password %}<p class="field-error">{{ errors.password }}</p>{% endif %}</div>
+    <div class="filter-actions"><button type="submit" class="btn btn-primary">Crear usuario</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Nombres visibles de los roles</h2>
+  {% for r in roles %}
+  <form method="post" action="{{ url_for('admin.role_name', code=r.code) }}" class="inline role-form" data-busy>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="rn-{{ r.code }}"><code>{{ r.code }}</code></label>
+    <input id="rn-{{ r.code }}" name="display_name" value="{{ r.display_name }}" maxlength="80" required>
+    <button type="submit" class="btn btn-sm">Guardar</button>
+  </form>
+  {% endfor %}
+</section>
+{% endblock %}

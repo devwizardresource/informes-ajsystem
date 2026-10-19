@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Informe {{ report.code }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Informe <code>{{ report.code }}</code> {{ status_badge(report.status_code) }}</h1>
+    <p class="muted small">
+      Elaborado por {{ report.owner_name }} · creado {{ report.created_at|localdt }} · revisión {{ report.revision }}
+      · última modificación {{ report.updated_at|localdt }} por {{ report.updated_by_name }}
+      {% if report.closed_at %} · cerrado {{ report.closed_at|localdt }} por {{ report.closed_by_name }}{% endif %}
+      {% if report.last_sent_at %} · enviado {{ report.last_sent_at|localdt }} por {{ report.sent_by_name }}{% endif %}
+    </p>
+  </div>
+  {% if caps.download %}
+  <a class="btn" href="{{ url_for('reports.download', report_id=report.id) }}">Descargar PDF</a>
+  {% endif %}
+</div>
+
+{% if template.provisional %}<p class="notice">{{ template.notice }}</p>{% endif %}
+
+{% if caps.edit %}
+<form id="report-form" class="card" method="post" action="{{ url_for('reports.save', report_id=report.id) }}" data-busy data-dirty-guard>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="revision" value="{{ report.revision }}">
+  <input type="hidden" name="op_id" value="{{ new_op_id() }}">
+  {% for sid, stitle, fields in template.sections %}
+  <fieldset>
+    <legend>{{ stitle }}</legend>
+    {% for f in fields %}
+    {% set v = values.get(f.id) %}
+    <div class="field">
+      {% if f.type == 'checkbox' %}
+        <label class="check"><input type="checkbox" id="f-{{ f.id }}" name="{{ f.id }}" value="1" {% if v %}checked{% endif %}> {{ f.label }}</label>
+      {% else %}
+        <label for="f-{{ f.id }}">{{ f.label }}{% if f.required_on_close %} <span class="req" title="Obligatorio para cerrar">*</span>{% endif %}</label>
+        {% if f.type == 'textarea' %}
+          <textarea id="f-{{ f.id }}" name="{{ f.id }}" rows="8" maxlength="{{ f.max_length }}">{{ v if v is not none else '' }}</textarea>
+        {% elif f.type == 'select' %}
+          <select id="f-{{ f.id }}" name="{{ f.id }}"><option value="">— Seleccione —</option>
+            {% for o in f.options %}<option value="{{ o }}" {% if v == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+          </select>
+        {% else %}
+          <input id="f-{{ f.id }}" name="{{ f.id }}" type="{{ 'date' if f.type == 'date' else ('number' if f.type == 'integer' else 'text') }}"
+                 {% if f.type == 'text' %}maxlength="{{ f.max_length }}"{% endif %} value="{{ v if v is not none else '' }}">
+        {% endif %}
+      {% endif %}
+      {% if f.help %}<p class="help">{{ f.help }}</p>{% endif %}
+      {% if errors.get(f.id) %}<p class="field-error" role="alert">{{ errors[f.id] }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </fieldset>
+  {% endfor %}
+  <p class="small muted"><span class="req">*</span> Obligatorio para cerrar el informe.</p>
+  <div class="actions">
+    <button type="submit" name="accion" value="guardar" class="btn btn-primary">Guardar cambios</button>
+    {% if caps.close %}
+    <button type="submit" name="accion" value="cerrar" class="btn btn-warn"
+            data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Se guardarán los datos actuales y el informe quedará bloqueado para edición.">Cerrar informe y registrar</button>
+    {% endif %}
+  </div>
+</form>
+{% else %}
+<section class="card">
+  {% for sid, stitle, fields in template.sections %}
+  <h2>{{ stitle }}</h2>
+  <dl class="readonly">
+    {% for f in fields %}{% set v = report.data.get(f.id) %}
+    <dt>{{ f.label }}</dt>
+    <dd class="pre">{% if f.type == 'checkbox' %}{{ 'Sí' if v else 'No' }}{% else %}{{ v if v not in (none, '') else '—' }}{% endif %}</dd>
+    {% endfor %}
+  </dl>
+  {% endfor %}
+  {% if report.status_code in ('CERRADO', 'ENVIADO') %}<p class="notice">Informe cerrado: el contenido está bloqueado para edición.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if caps.send %}
+<form class="card" method="post" action="{{ url_for('reports.send', report_id=report.id) }}" data-busy>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="op_id" value="{{ new_op_id() }}">
+  <h2>Enviar informe</h2>
+  <p>El informe está cerrado. Al enviarlo quedará disponible para el responsable administrativo y el jefe.</p>
+  <button type="submit" class="btn btn-primary" data-confirm="¿Enviar el informe {{ report.code }}?">Enviar informe</button>
+</form>
+{% endif %}
+
+{% if caps.reopen %}
+<form class="card" method="post" action="{{ url_for('reports.reopen', report_id=report.id) }}" data-busy>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="op_id" value="{{ new_op_id() }}">
+  <h2>Reabrir informe</h2>
+  <label for="motivo">Motivo de la reapertura (obligatorio, mínimo 10 caracteres)</label>
+  <textarea id="motivo" name="motivo" rows="3" minlength="10" maxlength="1000" required>{{ errors.get('motivo_valor', '') }}</textarea>
+  <button type="submit" class="btn btn-warn" data-confirm="¿Reabrir el informe {{ report.code }}? Quedará registrado con su usuario y motivo.">Reabrir informe</button>
+</form>
+{% endif %}
+
+<section class="card">
+  <h2>Trazabilidad</h2>
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th scope="col">Fecha</th><th scope="col">Operación</th><th scope="col">Usuario</th><th scope="col">Estado</th><th scope="col">Rev.</th><th scope="col">Motivo</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+      <tr>
+        <td data-label="Fecha">{{ h.created_at|localdt('%Y-%m-%d %H:%M:%S') }}</td>
+        <td data-label="Operación">{{ {'CREAR':'Creación','GUARDAR':'Guardado','CERRAR':'Cierre','ENVIAR':'Envío','REABRIR':'Reapertura'}[h.action] }}</td>
+        <td data-label="Usuario">{{ h.full_name }}</td>
+        <td data-label="Estado">{% if h.from_status and h.from_status != h.to_status %}{{ STATUS_LABELS[h.from_status] }} → {% endif %}{{ STATUS_LABELS[h.to_status] }}</td>
+        <td data-label="Rev.">{{ h.revision }}</td>
+        <td data-label="Motivo" class="pre">{{ h.reason or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <details>
+    <summary>Versiones guardadas ({{ versions|length }})</summary>
+    <ul class="versions">
+      {% for v in versions %}<li>Rev. {{ v.revision }} · {{ v.saved_at|localdt('%Y-%m-%d %H:%M:%S') }} · {{ v.full_name }} · <code title="SHA-256 del contenido">{{ v.content_sha256[:16] }}…</code></li>{% endfor %}
+    </ul>
+  </details>
+</section>
+{% endblock %}

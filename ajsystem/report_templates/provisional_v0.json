@@ -1,0 +1,18 @@
+{
+  "code": "provisional_v0",
+  "name": "Plantilla provisional",
+  "provisional": true,
+  "notice": "Campos provisionales mínimos. Los campos definitivos de la auditoría se incorporarán cuando el propietario entregue la plantilla oficial.",
+  "document_template": "provisional_v0.html",
+  "sections": [
+    {
+      "id": "general",
+      "title": "Datos generales",
+      "fields": [
+        {"id": "titulo", "label": "Título del informe", "type": "text", "max_length": 200, "required_on_close": true, "maps_to": "title"},
+        {"id": "numero_serie", "label": "Número de serie del equipo", "type": "text", "max_length": 100, "required_on_close": false, "maps_to": "equipment_serial"},
+        {"id": "observaciones", "label": "Observaciones", "type": "textarea", "max_length": 20000, "required_on_close": false}
+      ]
+    }
+  ]
+}

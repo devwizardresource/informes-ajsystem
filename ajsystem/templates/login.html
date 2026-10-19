@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Iniciar sesión{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Iniciar sesión</h1>
+  <form method="post" action="{{ url_for('auth.login') }}" data-busy>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="username">Usuario</label>
+    <input id="username" name="username" autocomplete="username" required maxlength="64" value="{{ username or '' }}" autofocus>
+    <label for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+    <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+  </form>
+</section>
+{% endblock %}

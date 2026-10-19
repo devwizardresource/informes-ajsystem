@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AJ System{% endblock %} · AJ System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ app_version }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ app_version }}" defer></script>
+</head>
+<body>
+<a class="skip" href="#contenido">Saltar al contenido</a>
+<header class="topbar">
+  <div class="brand">AJ System <span class="brand-sub">Auditoría técnica de hardware</span></div>
+  {% if current_user %}
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-principal">Menú</button>
+  <nav id="nav-principal" class="nav" aria-label="Navegación principal">
+    {% set ep = request.endpoint or '' %}
+    {% if has_perm('module.home') %}<a href="{{ url_for('home.index') }}" {% if ep.startswith('home.') %}aria-current="page"{% endif %}>Inicio</a>{% endif %}
+    {% if has_perm('module.reports') %}<a href="{{ url_for('reports.index') }}" {% if ep.startswith('reports.') %}aria-current="page"{% endif %}>Creación de informe</a>{% endif %}
+    {% if has_perm('module.consolidation') %}<a href="{{ url_for('consolidation.index') }}" {% if ep.startswith('consolidation.') %}aria-current="page"{% endif %}>Consolidación de informes</a>{% endif %}
+    {% if has_perm('module.audit_log') %}<a href="{{ url_for('logs.index') }}" {% if ep.startswith('logs.') %}aria-current="page"{% endif %}>Registro detallado</a>{% endif %}
+    {% if has_perm('users.manage') %}<a href="{{ url_for('admin.users_index') }}" {% if ep.startswith('admin.') %}aria-current="page"{% endif %}>Usuarios</a>{% endif %}
+  </nav>
+  <div class="userbox">
+    <span class="who"><strong>{{ current_user.full_name }}</strong><small>{{ current_user.role_name }}</small></span>
+    <a class="link-small" href="{{ url_for('auth.change_password') }}">Contraseña</a>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-sm">Cerrar sesión</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+<main id="contenido" class="container" tabindex="-1">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes" role="status" aria-live="polite">
+      {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer">AJ System v{{ app_version }}</footer>
+</body>
+</html>

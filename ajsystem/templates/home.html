@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_macros.html" import report_rows with context %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Bienvenido/a, {{ current_user.full_name }}</h1>
+  <p class="muted">Perfil: {{ current_user.role_name }} · Usuario: {{ current_user.username }}</p>
+  <div class="actions">
+    {% if has_perm('report.create') %}
+    <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
+    </form>
+    {% endif %}
+    {% if has_perm('module.consolidation') %}<a class="btn" href="{{ url_for('consolidation.index') }}">Consolidación de informes</a>{% endif %}
+    {% if has_perm('module.audit_log') %}<a class="btn" href="{{ url_for('logs.index') }}">Registro detallado</a>{% endif %}
+  </div>
+</section>
+
+{% if summary is defined %}
+<section>
+  <h2>Resumen de informes visibles</h2>
+  <div class="stats">
+    {% for code, n in summary.items() %}
+    <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
+    {% endfor %}
+  </div>
+</section>
+<section>
+  <h2>Informes enviados recientemente</h2>
+  {{ report_rows(recent_sent, show_owner=true, date_label='Enviado', date_field='last_sent_at', empty='Todavía no se han recibido informes.') }}
+</section>
+<section>
+  <h2>Pendientes de revisión o en corrección</h2>
+  <p class="muted small">Informes enviados anteriormente que han sido reabiertos o cerrados y aún no reenviados.</p>
+  {{ report_rows(in_correction, show_owner=true, empty='No hay informes en corrección.') }}
+</section>
+{% endif %}
+
+{% if has_perm('module.reports') %}
+<section>
+  <h2>Mis informes en elaboración</h2>
+  {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
+</section>
+<section>
+  <h2>Mis informes cerrados pendientes de envío</h2>
+  {{ report_rows(closed_pending, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
+</section>
+<section>
+  <h2>Mis informes enviados</h2>
+  {{ report_rows(sent_own, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
+</section>
+{% endif %}
+{% endblock %}
