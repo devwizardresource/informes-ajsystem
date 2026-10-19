@@ -215,12 +215,17 @@ def _apply_form(cur, report: dict, user: dict, form, expected_revision, now) -> 
     if expected != report["revision"]:
         raise ReportError("El informe fue modificado por otra persona desde que lo abrió. "
                           "Recargue la página para ver la versión actual antes de guardar.", code="conflicto")
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
+    current_data = schema.data_for_template(report["template_code"], report["data"])
     data, errors = schema.parse_form(template, form)
     if errors:
         raise ReportError("Revise los campos marcados.", status=422, field_errors=errors, code="validacion")
+    # Keep fields from a legacy payload that are not part of the official form. This
+    # preserves historical provisional values while the report is edited in the new UI.
+    known = {f.id for f in template.fields}
+    data = {**{k: v for k, v in report["data"].items() if k not in known}, **data}
     cols = schema.mapped_columns(template, data)
-    if (data == report["data"] and cols["title"] == report["title"]
+    if (data == current_data and cols["title"] == report["title"]
             and cols["equipment_serial"] == report["equipment_serial"]
             and cols["equipment_brand"] == report.get("equipment_brand")):
         return report, False
@@ -238,7 +243,7 @@ def _apply_form(cur, report: dict, user: dict, form, expected_revision, now) -> 
     _insert_event(cur, report["id"], "GUARDAR", report["status_code"], report["status_code"], revision, user, now)
     audit.write(cur, audit.REPORT_SAVED, "EXITO", object_type="informe", object_id=report["code"],
                 detail={"informe_id": report["id"], "revision": revision, "estado": report["status_code"],
-                        "campos_modificados": sorted(k for k in data if data.get(k) != report["data"].get(k))})
+                        "campos_modificados": sorted(k for k in data if data.get(k) != current_data.get(k))})
     return {**report, "data": data, **cols, "revision": revision}, True
 
 
@@ -265,8 +270,8 @@ def close(report_id: int, user: dict, form, expected_revision, idem_key: str | N
                               code="bloqueado")
         now = db.utcnow()
         report, _changed = _apply_form(cur, report, user, form, expected_revision, now)
-        template = schema.load_template(report["template_code"])
-        missing = schema.missing_for_close(template, report["data"])
+        template = schema.effective_template(report["template_code"])
+        missing = schema.missing_for_close(template, schema.data_for_template(report["template_code"], report["data"]))
         if missing:
             raise ReportError("Faltan campos obligatorios para cerrar el informe. Los cambios no se guardaron.", status=422,
                               field_errors=missing, code="validacion")

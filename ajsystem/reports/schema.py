@@ -22,6 +22,7 @@ _CODE_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 FIELD_TYPES = {"text", "textarea", "date", "integer", "select", "checkbox"}
 MAPPABLE_COLUMNS = {"title": 200, "equipment_serial": 100, "equipment_brand": 100}
 WIDGETS = {"", "radio"}
+OFFICIAL_TEMPLATE_CODE = "aj_v1"
 
 
 class TemplateError(RuntimeError):
@@ -65,6 +66,42 @@ class Template:
 
     def field(self, field_id: str) -> Field | None:
         return next((f for f in self.fields if f.id == field_id), None)
+
+
+def effective_template(code: str) -> Template:
+    """Return the template used by the current UI and document renderer.
+
+    Reports created before the owner delivered the official format keep their original
+    ``template_code`` for auditability.  They are nevertheless edited and rendered with
+    the official sheet so opening an old, still valid report cannot crash the application.
+    """
+    template = load_template(code)
+    return load_template(OFFICIAL_TEMPLATE_CODE) if template.provisional else template
+
+
+def data_for_template(code: str, data: dict | None) -> dict:
+    """Adapt data from a legacy provisional report to the official field ids.
+
+    The original dictionary is never mutated. Unknown legacy fields are deliberately kept
+    by callers when saving so historical values remain in the JSON payload.
+    """
+    source = dict(data or {})
+    original = load_template(code)
+    if not original.provisional:
+        return source
+    target = empty_data(effective_template(code))
+    # Names used by provisional_v0. Official ``nombre`` and ``numero_serie`` are the
+    # corresponding inventory fields in the delivered format.
+    if source.get("titulo") not in (None, ""):
+        target["nombre"] = source["titulo"]
+    if source.get("numero_serie") not in (None, ""):
+        target["numero_serie"] = source["numero_serie"]
+    # If a report has already been submitted through the compatibility UI, prefer the
+    # official values that are already present in its JSON payload.
+    for field_id in target:
+        if field_id in source:
+            target[field_id] = source[field_id]
+    return target
 
 
 @lru_cache(maxsize=16)

@@ -49,7 +49,8 @@ def _data_uri(mime: str, content: bytes) -> str:
 def build_document_data(report: dict, events: list[dict], generated_by: dict, now, tz_name: str,
                         files: list[dict] | None = None, owner: dict | None = None) -> dict:
     tz = ZoneInfo(tz_name)
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
+    values = schema.data_for_template(report["template_code"], report["data"])
     files = files or []
     owner = owner or {"username": report.get("owner_username", ""), "full_name": report.get("owner_name", ""),
                       "id_number": report.get("owner_id_number")}
@@ -57,7 +58,7 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
     return {
         "numero": code.rsplit("-", 1)[-1][-5:],
         "anio": code.split("-")[1] if code.count("-") >= 2 else "",
-        "valores": {f.id: _display(f, report["data"].get(f.id)) for f in template.fields},
+        "valores": {f.id: _display(f, values.get(f.id)) for f in template.fields},
         "registro": {"usuario": owner.get("username") or "", "nombre": owner.get("full_name") or "",
                      "identificacion": owner.get("id_number") or ""},
         "firmas": {a["kind"]: _data_uri(a["mime"], a["content"]) for a in files if a["kind"] != "FOTO"},
@@ -66,7 +67,7 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
         "secciones_plantilla": template.sections,
         # Hoja de la plantilla del propietario (resources/) rellenada, y su hoja de estilos.
         "hoja": sheet.render(
-            template, report["data"], editable=False, static=True,
+            template, values, editable=False, static=True,
             number=code.rsplit("-", 1)[-1][-5:], year=code.split("-")[1] if code.count("-") >= 2 else "",
             registro={"usuario": owner.get("username") or "", "nombre": owner.get("full_name") or "",
                       "identificacion": owner.get("id_number") or ""},
@@ -85,7 +86,7 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
             "enviado": _fmt(report["last_sent_at"], tz),
             "enviado_por": report.get("sent_by_name") or "",
             "reaperturas": report["reopen_count"],
-            "huella": _content_hash(report["title"], report["equipment_serial"], report["data"]),
+            "huella": _content_hash(report["title"], report["equipment_serial"], values),
             "generado": _fmt(now, tz),
             "generado_por": generated_by["full_name"],
             "zona_horaria": tz_name,
@@ -93,7 +94,7 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
         "secciones": [
             {"titulo": sec.title, "numero": sec.number,
              "campos": [{"id": f.id, "etiqueta": f.label, "tipo": f.type,
-                         "valor": _display(f, report["data"].get(f.id))} for f in sec.fields]}
+                         "valor": _display(f, values.get(f.id))} for f in sec.fields]}
             for sec in template.sections
         ],
         "historial": [

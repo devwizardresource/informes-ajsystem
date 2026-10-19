@@ -102,7 +102,8 @@ def import_matrix():
 # Detalle, guardado y ciclo de vida
 # ---------------------------------------------------------------------------
 def _render_detail(report: dict, *, form_values: dict | None = None, errors: dict | None = None, status: int = 200):
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
+    values = form_values if form_values is not None else schema.data_for_template(report["template_code"], report["data"])
     pending = service.pending_request_for(report["id"])
     caps = service.capabilities(report, g.user, pending)
     files = attachments.list_for(report["id"])
@@ -110,7 +111,7 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
                   for a in files if a["kind"] in attachments.SIGNATURES}
     # La hoja es la plantilla del propietario (resources/), rellenada con los datos del informe.
     sheet_html = sheet.render(
-        template, form_values if form_values is not None else report["data"], editable=caps["edit"],
+        template, values, editable=caps["edit"],
         errors=errors, number=report["code"].rsplit("-", 1)[-1][-5:], year=report["code"].split("-")[1],
         registro={"usuario": report["owner_username"], "nombre": report["owner_name"],
                   "identificacion": report.get("owner_id_number")},
@@ -129,13 +130,14 @@ def _report_for_preview(report: dict, template: schema.Template) -> dict:
     """Build a non-persisted snapshot from the values currently in the form."""
     if request.method != "POST" or not service.capabilities(report, g.user)["edit"]:
         return report
+    current_data = schema.data_for_template(report["template_code"], report["data"])
     data, errors = schema.parse_form(template, request.form)
     if errors:
         # Preview is not a save operation. Keep the last valid value for a
         # malformed field instead of putting invalid data in the PDF.
-        data = {**report["data"], **data}
+        data = {**current_data, **data}
         for field_id in errors:
-            data[field_id] = report["data"].get(field_id)
+            data[field_id] = current_data.get(field_id)
     preview = {**report, "data": data}
     preview.update(schema.mapped_columns(template, data))
     return preview
@@ -221,7 +223,8 @@ def save(report_id: int):
             report = service.get_visible(report_id, g.user)
             if report is not None:
                 flash(exc.message, "error")
-                values = {k: request.form.get(k) for k in report["data"]}
+                template = schema.effective_template(report["template_code"])
+                values = {field.id: request.form.get(field.id) for field in template.fields}
                 return _render_detail(report, form_values=values, errors=exc.field_errors, status=422)
         return _reject(exc, report_id, "cerrar" if action == "cerrar" else "guardar")
     return redirect(url_for("reports.detail", report_id=report_id))
@@ -342,7 +345,7 @@ def autofill(report_id: int):
         return _reject_json(service.ReportError("El informe está cerrado: no se puede autocompletar.", status=403,
                                                 code="bloqueado"), report_id, "autocompletar")
     text = (request.form.get("texto") or "")[:20000]
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
     suggestions = extract.from_text(text, template)
     public_id = request.form.get("adjunto", "")
     if _PUBLIC_ID.match(public_id) and text.strip():
@@ -358,7 +361,7 @@ def autofill(report_id: int):
 @require_perm("report.download")
 def download(report_id: int):
     report = _visible_or_404(report_id)
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
     try:
         response, doc = _pdf_response(report, template, inline=False)
     except documents.PdfEngineUnavailable:
@@ -385,7 +388,7 @@ def preview_pdf(report_id: int):
     for closed/read-only reports.
     """
     report = _visible_or_404(report_id)
-    template = schema.load_template(report["template_code"])
+    template = schema.effective_template(report["template_code"])
     report = _report_for_preview(report, template)
     try:
         response, _doc = _pdf_response(report, template, inline=True)
