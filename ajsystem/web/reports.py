@@ -125,6 +125,37 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
     ), status
 
 
+def _report_for_preview(report: dict, template: schema.Template) -> dict:
+    """Build a non-persisted snapshot from the values currently in the form."""
+    if request.method != "POST" or not service.capabilities(report, g.user)["edit"]:
+        return report
+    data, errors = schema.parse_form(template, request.form)
+    if errors:
+        # Preview is not a save operation. Keep the last valid value for a
+        # malformed field instead of putting invalid data in the PDF.
+        data = {**report["data"], **data}
+        for field_id in errors:
+            data[field_id] = report["data"].get(field_id)
+    preview = {**report, "data": data}
+    preview.update(schema.mapped_columns(template, data))
+    return preview
+
+
+def _pdf_response(report: dict, template: schema.Template, *, inline: bool) -> tuple[Response, dict]:
+    """Render a report with the official sheet and return it plus its doc data."""
+    doc = documents.build_document_data(
+        report, service.history(report["id"]), g.user, db.utcnow(),
+        current_app.config["AJS_SETTINGS"].timezone, attachments.for_document(report["id"]),
+    )
+    pdf = documents.render_pdf(doc, template.document_template)
+    disposition = "inline" if inline else "attachment"
+    response = Response(pdf, mimetype="application/pdf", headers={
+        "Content-Disposition": f'{disposition}; filename="{report["code"]}_rev{report["revision"]}.pdf"',
+        "Cache-Control": "no-store",
+    })
+    return response, doc
+
+
 @bp.route("/plantilla.css")
 def template_css():
     """Hoja de estilos de la plantilla del propietario (se sirve aparte: la CSP no admite estilos en línea)."""
@@ -328,12 +359,8 @@ def autofill(report_id: int):
 def download(report_id: int):
     report = _visible_or_404(report_id)
     template = schema.load_template(report["template_code"])
-    now = db.utcnow()
-    doc = documents.build_document_data(report, service.history(report_id), g.user, now,
-                                        current_app.config["AJS_SETTINGS"].timezone,
-                                        attachments.for_document(report_id))
     try:
-        pdf = documents.render_pdf(doc, template.document_template)
+        response, doc = _pdf_response(report, template, inline=False)
     except documents.PdfEngineUnavailable:
         current_app.logger.exception("Motor PDF no disponible")
         audit.write_standalone(audit.REPORT_DOWNLOADED, "ERROR", object_type="informe", object_id=report["code"],
@@ -345,7 +372,25 @@ def download(report_id: int):
                            detail={"informe_id": report_id, "revision": report["revision"],
                                    "estado": report["status_code"], "plantilla": template.code,
                                    "huella_contenido": doc["meta"]["huella"]})
-    return Response(pdf, mimetype="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="{report["code"]}_rev{report["revision"]}.pdf"',
-        "Cache-Control": "no-store",
-    })
+    return response
+
+
+@bp.route("/<int:report_id>/pdf/preview", methods=["GET", "POST"])
+@require_perm("report.download")
+def preview_pdf(report_id: int):
+    """Show the official PDF without changing the persisted report.
+
+    POST receives the values currently visible in the editor, so the PDF can
+    be checked before saving or downloading it. GET previews the saved version
+    for closed/read-only reports.
+    """
+    report = _visible_or_404(report_id)
+    template = schema.load_template(report["template_code"])
+    report = _report_for_preview(report, template)
+    try:
+        response, _doc = _pdf_response(report, template, inline=True)
+        return response
+    except documents.PdfEngineUnavailable:
+        current_app.logger.exception("Motor PDF no disponible durante la previsualización")
+        return render_template("error.html", code=503,
+                               message="No fue posible generar la previsualización PDF en este momento."), 503

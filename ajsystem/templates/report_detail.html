@@ -29,7 +29,13 @@
   {% endif %}
   <button type="button" class="ghost" data-print>Imprimir / Guardar como PDF</button>
   {% if editable %}<button type="button" class="ghost" data-clear-form>Limpiar formulario</button>{% endif %}
-  {% if caps.download %}<a class="ghost" href="{{ url_for('reports.download', report_id=report.id) }}">Descargar PDF</a>{% endif %}
+  {% if caps.download %}
+  <button type="submit" form="report-form" formaction="{{ url_for('reports.preview_pdf', report_id=report.id) }}"
+          formmethod="post" formtarget="_blank" class="ghost" data-no-busy>
+    Previsualizar PDF
+  </button>
+  <a class="ghost" href="{{ url_for('reports.download', report_id=report.id) }}">Descargar PDF</a>
+  {% endif %}
   <span class="who">{{ current_user.full_name }} · {{ current_user.role_name }}</span>
 </div>
 
@@ -85,6 +91,7 @@
 <section class="panel" id="anexo">
   <h2>Anexo fotográfico ({{ photos|length }})</h2>
   <p class="small muted">Fotos del equipo en orden cronológico. Se incluyen en el PDF del informe.</p>
+  {% if editable %}<p class="small muted" data-photo-status aria-live="polite">La foto se guarda inmediatamente como anexo; los campos se guardan con «Guardar cambios».</p>{% endif %}
   <div class="gallery" data-gallery>
     {% for a in photos %}
     <figure>

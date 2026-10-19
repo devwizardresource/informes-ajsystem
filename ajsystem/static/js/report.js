@@ -15,6 +15,7 @@
   var AUTOFILL_URL = form.getAttribute("data-autofill-url");
   var OCR_BASE = form.getAttribute("data-ocr-base");
   var MAX_SIDE = 2000;
+  var photoStatus = document.querySelector("[data-photo-status]");
 
   function markDirty() { form.dispatchEvent(new Event("input", { bubbles: true })); }
 
@@ -25,8 +26,12 @@
     return fetch(url, { method: "POST", body: fd, credentials: "same-origin",
                         headers: { "X-CSRF-Token": CSRF, "Accept": "application/json" } })
       .then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (body) {
-          if (!r.ok) throw new Error(body.error || ("Error " + r.status + " del servidor"));
+        return r.text().then(function (raw) {
+          var body = {};
+          try { body = raw ? JSON.parse(raw) : {}; } catch (_) {}
+          if (!r.ok) {
+            throw new Error(body.error || ("No se pudo completar la operación (HTTP " + r.status + ")."));
+          }
           return body;
         });
       });
@@ -55,7 +60,12 @@
   }
 
   function toBlob(canvas, type, quality) {
-    return new Promise(function (resolve) { canvas.toBlob(resolve, type, quality); });
+    return new Promise(function (resolve, reject) {
+      canvas.toBlob(function (blob) {
+        if (blob) resolve(blob);
+        else reject(new Error("El navegador no pudo preparar la imagen."));
+      }, type, quality);
+    });
   }
 
   // ---------------------------------------------------------------- estado en pantalla
@@ -66,6 +76,9 @@
     panel.querySelector("[data-ocr-title]").textContent = title;
     panel.querySelector("[data-ocr-msg]").textContent = msg || "";
     panel.querySelector("[data-ocr-bar]").style.width = (pct == null ? 0 : pct) + "%";
+  }
+  function photoMessage(msg) {
+    if (photoStatus) photoStatus.textContent = msg;
   }
   function showText(text) {
     var d = panel.querySelector("[data-ocr-details]");
@@ -147,7 +160,7 @@
     img.src = info.thumb; img.alt = "Foto del equipo"; img.width = 180; img.height = 130;
     a.appendChild(img);
     var cap = document.createElement("figcaption");
-    cap.textContent = "Nueva foto · " + (name || "") + " (recargue para gestionarla)";
+    cap.textContent = "Foto anexada · " + (name || "") + " (recargue para gestionarla)";
     fig.appendChild(a); fig.appendChild(cap);
     gallery.appendChild(fig);
   }
@@ -156,22 +169,30 @@
   function processPhoto(file) {
     var loaded;
     status("Preparando la foto…", file.name, 5);
+    photoMessage("Preparando «" + file.name + "»…");
     return loadImage(file).then(function (r) {
       loaded = r;
       return toBlob(drawScaled(r.img, MAX_SIDE), "image/jpeg", 0.88);
     }).then(function (blob) {
       status("Anexando la foto al informe…", "", 15);
+      photoMessage("Anexando «" + file.name + "» al informe…");
       return post(UPLOAD_URL, { tipo: "FOTO", archivo: new File([blob], "foto.jpg", { type: "image/jpeg" }) });
     }).then(function (info) {
       addToGallery(info, file.name);
       status("Foto anexada. Cargando el reconocimiento de texto…", "", 25);
-      // Escala de grises y contraste: mejora la lectura de pantallas y etiquetas.
-      var ocrCanvas = drawScaled(loaded.img, MAX_SIDE, "grayscale(1) contrast(1.35)");
-      return getWorker().then(function (worker) { return worker.recognize(ocrCanvas); }).then(function (res) {
+      photoMessage("Foto anexada. Intentando reconocer el texto…");
+      // OCR es opcional: si el navegador no puede cargar Tesseract, la foto
+      // ya quedó guardada y no debe presentarse como un fallo de la subida.
+      return Promise.resolve().then(function () {
+        // Escala de grises y contraste: mejora la lectura de pantallas y etiquetas.
+        var ocrCanvas = drawScaled(loaded.img, MAX_SIDE, "grayscale(1) contrast(1.35)");
+        return getWorker().then(function (worker) { return worker.recognize(ocrCanvas); });
+      }).then(function (res) {
         var text = (res.data && res.data.text) || "";
         showText(text);
         if (!text.trim()) {
-          status("Foto anexada", "No se reconoció texto. Intente con una foto más cercana, nítida y sin reflejos.", 100);
+          status("Foto anexada", "No se reconoció texto. La foto sí quedó guardada.", 100);
+          photoMessage("Foto anexada correctamente. No se encontró texto para autocompletar.");
           return;
         }
         return post(AUTOFILL_URL, { texto: text, adjunto: info.id }).then(function (result) {
@@ -181,10 +202,16 @@
             : "No se encontraron datos nuevos para los campos vacíos.";
           if (r.kept.length) msg += " Se respetaron los valores ya escritos en: " + r.kept.join(", ") + ".";
           status("Foto anexada y texto reconocido", msg, 100);
+          photoMessage("Foto anexada y campos sugeridos. Revise y guarde los cambios.");
         });
+      }).catch(function (err) {
+        status("Foto anexada", "No se pudo reconocer el texto, pero la foto sí quedó guardada.", 100);
+        photoMessage("Foto anexada correctamente. El reconocimiento de texto no está disponible en este navegador.");
+        if (window.console && console.warn) console.warn("OCR no disponible:", err);
       });
     }).catch(function (err) {
-      status("No se pudo procesar la foto", err.message, 0);
+      status("No se pudo anexar la foto", err.message, 0);
+      photoMessage("No se pudo anexar la foto: " + err.message);
     }).then(function () {
       if (loaded) URL.revokeObjectURL(loaded.url);
     });

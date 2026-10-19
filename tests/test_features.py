@@ -236,6 +236,27 @@ def test_plantilla_de_importacion_descargable(browser, make_user):
 
 
 # ---------------------------------------------------------------- PDF con anexo
+def test_previsualizacion_pdf_no_guarda_y_se_muestra_en_linea(browser, make_user, q):
+    pytest.importorskip("weasyprint")
+    owner = make_user("RESPONSABLE")
+    b = browser(owner)
+    rid = create_report(b)
+    token = b.csrf(f"/informes/{rid}")
+    r = b.client.post(f"/informes/{rid}/pdf/preview", data={
+        "csrf_token": token,
+        "fecha": "2026-10-19",
+        "nombre": "Equipo solo en previsualización",
+        "dispositivo": "Portátil",
+        "marca": "Dell",
+        "numero_serie": "PREVIEW-001",
+        "estado": "Activo",
+    })
+    assert r.status_code == 200 and r.data[:4] == b"%PDF"
+    assert r.headers["Content-Disposition"].startswith("inline;")
+    row = q("SELECT title, equipment_serial FROM reports WHERE id = %s", (rid,))[0]
+    assert row == {"title": "", "equipment_serial": None}
+
+
 def test_pdf_incluye_anexo_fotografico(browser, make_user, q):
     pytest.importorskip("weasyprint")
     t, j = make_user("TECNICO"), make_user("JEFE")

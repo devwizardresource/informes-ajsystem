@@ -17,7 +17,8 @@ from .reports.service import STATUS_LABELS
 from .security import csrf, sessions
 from .security.authz import has_perm
 
-__version__ = "1.0.0"
+# Browser-facing assets are cached for a year; bump this token when they change.
+__version__ = "1.1.0"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",

@@ -49,6 +49,9 @@
         return;
       }
       if (!form.hasAttribute("data-busy")) { dirty = false; return; }
+      // Preview opens a separate tab with the current values. Do not lock the
+      // editor or mark unsaved changes as persisted while it is loading.
+      if (submitter && submitter.hasAttribute("data-no-busy")) return;
       if (form.dataset.submitting === "1") {  // segundo clic: se ignora
         e.preventDefault();
         return;
