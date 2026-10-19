@@ -39,8 +39,11 @@ def register_cli(app) -> None:
     def db_migrate(user):
         """Aplica migraciones pendientes. Haga un respaldo antes (scripts/backup.py)."""
         s = current_app.config["AJS_SETTINGS"]
-        pw = os.environ.get("AJS_DB_ROOT_PASSWORD") if user == "root" else None
-        pw = pw or getpass.getpass(f"Contraseña de {user}: ")
+        known = {"root": os.environ.get("AJS_DB_ROOT_PASSWORD"),
+                 s.db_admin_user: s.db_admin_password, s.db_user: s.db_password}
+        # En alojamientos sin cuenta DBA (Hostinger compartido) se migra con la cuenta de hPanel
+        # sin pedir la contraseña: ya está en el entorno del proceso.
+        pw = known.get(user) or getpass.getpass(f"Contraseña de {user}: ")
         applied = dbadmin.migrate(s, user=user, password=pw, log=click.echo)
         click.echo(f"Migraciones aplicadas: {applied or 'ninguna (al día)'}")
 
@@ -60,6 +63,30 @@ def register_cli(app) -> None:
         except users.UserError as exc:
             raise click.ClickException(f"{exc.message} {exc.field_errors}")
         click.echo(f"Usuario creado con id {uid}. Deberá cambiar la contraseña en su primer acceso.")
+
+    @app.cli.command("ensure-initial-user")
+    def ensure_initial_user():
+        """Crea el primer RESPONSABLE si aún no existe ninguno (despliegue sin consola).
+
+        Lee AJS_INITIAL_ADMIN_USER, AJS_INITIAL_ADMIN_NAME y AJS_INITIAL_ADMIN_PASSWORD. La
+        contraseña es temporal: el usuario debe cambiarla en su primer acceso. Si ya hay un
+        responsable no hace nada, así que puede ejecutarse en cada arranque.
+        """
+        if db.query_one("SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE r.code = 'RESPONSABLE' LIMIT 1"):
+            click.echo("Ya existe un responsable; no se crea ningún usuario.")
+            return
+        username = os.environ.get("AJS_INITIAL_ADMIN_USER", "").strip()
+        password = os.environ.get("AJS_INITIAL_ADMIN_PASSWORD", "")
+        if not username or not password:
+            raise click.ClickException("Defina AJS_INITIAL_ADMIN_USER y AJS_INITIAL_ADMIN_PASSWORD.")
+        full_name = os.environ.get("AJS_INITIAL_ADMIN_NAME", "").strip() or "Responsable"
+        role_row = db.query_one("SELECT id FROM roles WHERE code = 'RESPONSABLE'")
+        try:
+            uid = users.create_user(username, full_name, "", password, role_row["id"],
+                                    actor_note={"origen": "arranque"}, audit_overrides=_cli_actor())
+        except users.UserError as exc:
+            raise click.ClickException(f"{exc.message} {exc.field_errors}")
+        click.echo(f"Responsable inicial creado con id {uid}. Deberá cambiar la contraseña en su primer acceso.")
 
     @app.cli.command("set-role-name")
     @click.argument("role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO"]))

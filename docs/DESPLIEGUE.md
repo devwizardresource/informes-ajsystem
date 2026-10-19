@@ -1,10 +1,53 @@
 # Alojamiento y despliegue
 
-## Situación actual (verificada el 2026-10-19)
+## Hostinger (alojamiento elegido, 2026-10-19)
 
-El único alojamiento identificado es **GitHub Pages**, que publica el sitio corporativo `../ajsystem/frontend` desde un workflow de GitHub Actions. GitHub Pages **solo sirve archivos estáticos**: no ejecuta Python ni ofrece MySQL. **No es compatible con AJ System.** El README de `../ajsystem` menciona Render, Railway o Fly para el backend, pero no hay nada configurado.
+El código vive en GitHub (`devwizardresource/informes-ajsystem`) y Hostinger lo importa como **aplicación Node.js desde Git**. Como AJ System es Python, el repositorio incluye un adaptador sin dependencias npm:
 
-**No se ha migrado ni contratado nada.** La elección corresponde al propietario.
+| Archivo | Función |
+|---|---|
+| `package.json` | Lo exige el importador de Hostinger. `npm run build` prepara Python; `npm start` arranca la app |
+| `hostinger/python-env.js` | Busca Python 3.9+ en el servidor, crea `.venv-runtime/` e instala `requirements.txt` (WeasyPrint es opcional: si Pango falta, solo falla la descarga de PDF) |
+| `server.js` | Escucha en `PORT`, aplica migraciones, crea el primer responsable si se configura, arranca gunicorn en `127.0.0.1` y le reenvía el tráfico |
+
+### Pasos en hPanel
+
+1. **Bases de datos → MySQL**: cree la base y su usuario (p. ej. `u123_ajsystem` / `u123_ajs`, contraseña de 16+ caracteres). Host: `localhost`. Hostinger usa MariaDB: el ejecutor de migraciones traduce la intercalación automáticamente.
+2. **Sitios web → Agregar sitio → Node.js → Importar repositorio de Git**: elija este repositorio, rama `main`. Configuración de compilación:
+   - Versión de Node: 20 o superior · Comando de compilación: `npm run build` · Archivo de entrada: `server.js` · Comando de inicio: `npm start`
+3. **Variables de entorno** de la aplicación (nunca en el repositorio):
+
+```
+AJS_ENV=production
+AJS_SECRET_KEY=<aleatorio, 48+ caracteres>
+AJS_AUDIT_HMAC_KEY=<otro aleatorio distinto>
+AJS_DB_HOST=localhost
+AJS_DB_PORT=3306
+AJS_DB_NAME=u123_ajsystem
+AJS_DB_USER=u123_ajs
+AJS_DB_PASSWORD=<contraseña de la base>
+AJS_DB_SSL=0
+AJS_COOKIE_SECURE=1
+AJS_TIMEZONE=America/Bogota
+# Solo para el primer despliegue (bórrelas después):
+AJS_INITIAL_ADMIN_USER=responsable
+AJS_INITIAL_ADMIN_NAME=Nombre Apellido
+AJS_INITIAL_ADMIN_PASSWORD=<temporal; se cambia en el primer acceso>
+```
+
+   Genere los secretos con `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
+4. Despliegue. En el primer arranque se aplican las migraciones y se crea el responsable inicial (solo si no existe ninguno). Active el certificado SSL del dominio: la cookie de sesión exige HTTPS.
+5. Cada `git push` a `main` se vuelve a desplegar (si activa el despliegue automático); las migraciones nuevas se aplican al arrancar. **Haga un respaldo antes de publicar una migración.**
+
+Variables opcionales: `AJS_AUTO_MIGRATE=0` (no migrar al arrancar), `AJS_DB_ADMIN_USER`/`AJS_DB_ADMIN_PASSWORD` (cuenta distinta para migrar), `AJS_PYTHON` (ruta del intérprete), `AJS_WORKERS`/`AJS_THREADS` (por defecto 2/4), `AJS_EDGE_PROXY_HOPS` (proxies de Hostinger delante de Node, por defecto 1).
+
+### Limitaciones en Hostinger compartido
+
+- **Python del servidor**: si no hay Python 3.9+ la página muestra «Servicio no disponible» y el registro de la app indica el motivo. Solución: `AJS_PYTHON` o un plan VPS.
+- **Una sola cuenta de base de datos**: hPanel no permite los privilegios mínimos de `sql/grants_app.sql`; la app usa la cuenta con todos los privilegios sobre su base. Los disparadores de solo inserción siguen protegiendo auditoría e historial ante la aplicación.
+- **Disparadores**: si el servidor tiene registro binario sin `log_bin_trust_function_creators`, la migración 0001 fallará al crear disparadores; habría que pedirlo al soporte de Hostinger o usar VPS.
+- **Respaldos**: `mysqldump` puede no estar disponible; use además las copias de bases de datos de hPanel.
+- Verificado localmente el 2026-10-19 con MariaDB 11.4: build, migraciones, disparadores, creación del responsable e inicio de sesión a través del proxy.
 
 ## Alternativas compatibles con la arquitectura autorizada (Python + MySQL)
 

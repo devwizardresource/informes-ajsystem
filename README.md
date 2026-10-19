@@ -9,7 +9,7 @@ Sistema web para crear, cerrar, enviar, reabrir y consolidar informes de auditor
 - **Sin Node.js / npm**
 
 > **Estado:** funcional en local, con 72 pruebas automatizadas aprobadas contra MySQL real.
-> Quedan **pendientes**: la plantilla oficial del PDF y de los campos de auditoría (se usa una provisional mínima) y la **decisión de alojamiento**: el alojamiento actual (GitHub Pages) no ejecuta Python ni MySQL. Ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+> Se despliega en **Hostinger** desde este repositorio de GitHub (aplicación Node.js que arranca la app Python; ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)). Queda **pendiente** la plantilla oficial del PDF y de los campos de auditoría (se usa una provisional mínima).
 
 ## Documentación
 

@@ -9,6 +9,7 @@ backups/
 
 # Python
 .venv/
+.venv-runtime/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -17,3 +18,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Node (despliegue Hostinger)
+node_modules/

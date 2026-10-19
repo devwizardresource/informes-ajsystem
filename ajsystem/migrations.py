@@ -49,7 +49,26 @@ def list_migrations(directory: Path = MIGRATIONS_DIR) -> list[tuple[str, Path, s
     return found
 
 
+# MariaDB (la base de los planes compartidos de Hostinger) no reconoce la intercalación de
+# MySQL 8. Se traduce al ejecutar, sin tocar los archivos (su checksum no cambia).
+_MARIADB_REWRITES = (("utf8mb4_0900_ai_ci", "utf8mb4_unicode_520_ci"),)
+
+
+def _is_mariadb(conn) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("SELECT VERSION() AS v")
+        return "mariadb" in str(cur.fetchone()["v"]).lower()
+
+
+def _adapt(stmt: str, mariadb: bool) -> str:
+    if mariadb:
+        for old, new in _MARIADB_REWRITES:
+            stmt = stmt.replace(old, new)
+    return stmt
+
+
 def apply_migrations(conn, directory: Path = MIGRATIONS_DIR, log=print) -> list[str]:
+    mariadb = _is_mariadb(conn)
     with conn.cursor() as cur:
         cur.execute(
             """CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -72,7 +91,7 @@ def apply_migrations(conn, directory: Path = MIGRATIONS_DIR, log=print) -> list[
         log(f"Aplicando {path.name} ...")
         with conn.cursor() as cur:
             for stmt in split_statements(path.read_text(encoding="utf-8")):
-                cur.execute(stmt)
+                cur.execute(_adapt(stmt, mariadb))
             cur.execute(
                 "INSERT INTO schema_migrations (version, filename, checksum, applied_at) VALUES (%s, %s, %s, UTC_TIMESTAMP(6))",
                 (version, path.name, checksum),

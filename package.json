@@ -1,0 +1,15 @@
+{
+  "name": "informes-ajsystem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AJ System (Flask + MySQL) empaquetado para el despliegue Node.js de Hostinger: server.js prepara Python y hace de proxy hacia gunicorn.",
+  "main": "server.js",
+  "scripts": {
+    "build": "node hostinger/python-env.js",
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

@@ -33,8 +33,15 @@ ERROR_MESSAGES = {
 
 
 def _load_dotenv() -> None:
-    env_file = Path(__file__).resolve().parent.parent / ".env"
-    if env_file.is_file() and os.environ.get("AJS_ENV", "development") != "production":
+    configured_file = os.environ.get("AJS_ENV_FILE", "").strip()
+    env_file = Path(configured_file).expanduser() if configured_file else (
+        Path(__file__).resolve().parent.parent / ".env"
+    )
+    # En producción solo se carga un archivo explícitamente indicado por el
+    # proceso web; así los secretos pueden vivir fuera del árbol público y no
+    # necesitan estar escritos en .htaccess.
+    can_load = os.environ.get("AJS_ENV", "development") != "production" or bool(configured_file)
+    if env_file.is_file() and can_load:
         from dotenv import load_dotenv  # noqa: PLC0415
         load_dotenv(env_file, override=False)
 
