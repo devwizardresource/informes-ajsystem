@@ -13,6 +13,8 @@
  */
 const http = require("node:http");
 const net = require("node:net");
+const fs = require("node:fs");
+const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { ensurePythonEnv, ROOT, log } = require("./hostinger/python-env");
 
@@ -23,6 +25,7 @@ const WORKERS = String(process.env.AJS_WORKERS || 2);
 const THREADS = String(process.env.AJS_THREADS || 4);
 
 let backendPort = null;
+let backendSocketPath = process.env.AJS_INTERNAL_SOCKET || path.join(ROOT, "tmp", "gunicorn.sock");
 let backendReady = false;
 let startupError = null;
 let shuttingDown = false;
@@ -62,7 +65,9 @@ function waitForBackend(port, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const attempt = () => {
-      const sock = net.connect(port, "127.0.0.1");
+      const sock = backendSocketPath
+        ? net.connect(backendSocketPath)
+        : net.connect(port, "127.0.0.1");
       sock.once("connect", () => { sock.destroy(); resolve(); });
       sock.once("error", () => {
         sock.destroy();
@@ -77,9 +82,10 @@ function waitForBackend(port, timeoutMs = 60000) {
 // ---------------------------------------------------------------- backend Python
 
 function startGunicorn(py) {
+  const bind = backendSocketPath ? `unix:${backendSocketPath}` : `127.0.0.1:${backendPort}`;
   child = spawn(py, [
     "-m", "gunicorn", "wsgi:app",
-    "--bind", `127.0.0.1:${backendPort}`,
+    "--bind", bind,
     "--workers", WORKERS,
     "--threads", THREADS,
     "--timeout", "120",
@@ -110,11 +116,21 @@ async function boot() {
     if (process.env.AJS_INITIAL_ADMIN_USER) {
       await runFlask(py, ["ensure-initial-user"], { allowFail: true });
     }
-    backendPort = Number(process.env.AJS_INTERNAL_PORT) || (await freePort());
+    if (process.env.AJS_INTERNAL_PORT) {
+      backendSocketPath = null;
+      backendPort = Number(process.env.AJS_INTERNAL_PORT);
+    } else if (backendSocketPath) {
+      fs.mkdirSync(path.dirname(backendSocketPath), { recursive: true });
+      try { fs.unlinkSync(backendSocketPath); } catch (err) {
+        if (err.code !== "ENOENT") throw err;
+      }
+    } else {
+      backendPort = await freePort();
+    }
     startGunicorn(py);
     await waitForBackend(backendPort);
     backendReady = true;
-    log(`AJ System listo (backend en 127.0.0.1:${backendPort}).`);
+    log(`AJ System listo (backend en ${backendSocketPath || `127.0.0.1:${backendPort}`}).`);
   } catch (err) {
     startupError = err;
     log(`ERROR de arranque: ${err.message}`);
@@ -152,7 +168,9 @@ const server = http.createServer((req, res) => {
       return statusPage(res, 503, "Servicio no disponible",
         "La aplicación no pudo iniciarse. El responsable del sistema debe revisar el registro de la aplicación en Hostinger.");
     }
-    return statusPage(res, 503, "Iniciando AJ System…", "La aplicación se está preparando. Recargue en unos segundos.");
+    // Hostinger termina procesos que responden 5xx durante el health check inicial.
+    // La página es transitoria y no se cachea; los errores reales siguen devolviendo 503.
+    return statusPage(res, 200, "Iniciando AJ System…", "La aplicación se está preparando. Recargue en unos segundos.");
   }
 
   const headers = { ...req.headers };
@@ -164,7 +182,12 @@ const server = http.createServer((req, res) => {
   delete headers["x-forwarded-prefix"];
 
   const upstream = http.request(
-    { host: "127.0.0.1", port: backendPort, method: req.method, path: req.url, headers },
+    {
+      ...(backendSocketPath ? { socketPath: backendSocketPath } : { host: "127.0.0.1", port: backendPort }),
+      method: req.method,
+      path: req.url,
+      headers,
+    },
     (up) => {
       res.writeHead(up.statusCode || 502, up.headers);
       up.pipe(res);
@@ -177,7 +200,8 @@ const server = http.createServer((req, res) => {
   req.pipe(upstream);
 });
 
-server.listen(PORT, () => {
+// Hostinger comprueba el puerto público por IPv4; no dejar el host implícito en ::.
+server.listen(PORT, "0.0.0.0", () => {
   log(`Escuchando en el puerto ${PORT}.`);
   boot();
 });

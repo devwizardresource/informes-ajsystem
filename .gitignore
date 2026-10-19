@@ -10,6 +10,7 @@ backups/
 # Python
 .venv/
 .venv-runtime/
+*.sock
 __pycache__/
 *.py[cod]
 .pytest_cache/
