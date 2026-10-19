@@ -1,106 +1,97 @@
-/* Hoja del «Formato de Informe» AJ System: réplica en pantalla de la plantilla de referencia
- * entregada por el propietario (Plantilla_Informe_AJ_System, en el historial de git). El PDF usa document_templates/aj_v1.html. */
-.sheet-wrap { --ink:#121826; --muted:#5b6475; --line:#cfd6e3; --label-bg:#f2f5fa; --navy:#0b1020; --cyan:#1ec8f5; --violet:#a24cf0; }
-.sheet {
-  width: 8.5in; max-width: 100%; min-height: 11in; margin: 18px auto; background: #fff; color: var(--ink);
-  padding: 0.5in 0.6in 0.55in; box-shadow: 0 6px 24px rgba(15,23,42,.15); position: relative;
-  font-size: 9pt; line-height: 1.25;
-}
-.sheet header.head { text-align: center; }
-.sheet .logo-badge { display: inline-block; line-height: 0; }
-.sheet .logo-badge img { height: 0.64in; width: auto; display: block; }
-.sheet .accent { height: 3px; margin: 8px 0 0; border-radius: 2px; background: linear-gradient(90deg, var(--cyan), var(--violet)); }
-.sheet .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 8px; }
-.sheet .title-row h1 { margin: 0; font-size: 14pt; letter-spacing: .06em; font-weight: 800; text-transform: uppercase; }
-.sheet .doc-meta { font-size: 8.5pt; color: var(--muted); text-align: right; white-space: nowrap; }
-.sheet .doc-meta b { display: inline-block; min-width: .9in; border-bottom: 1px solid var(--line); text-align: center; color: var(--ink); font-weight: 700; }
+/* Complementos de la plantilla del propietario (resources/Plantilla_Informe_AJ_System.html).
+ * El diseño de la hoja viene de la propia plantilla (/informes/plantilla.css); aquí solo:
+ * fuente Ubuntu Sans, campos de formulario con el aspecto de las celdas editables, estado del
+ * OCR, mensajes y los paneles bajo la hoja (anexo, envío, reapertura, eliminación, trazabilidad). */
+@font-face { font-family: "Ubuntu Sans"; font-weight: 400; font-display: swap; src: url("../fonts/ubuntu-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Ubuntu Sans"; font-weight: 500; font-display: swap; src: url("../fonts/ubuntu-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Ubuntu Sans"; font-weight: 600; font-display: swap; src: url("../fonts/ubuntu-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Ubuntu Sans"; font-weight: 700; font-display: swap; src: url("../fonts/ubuntu-sans-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Ubuntu Sans"; font-weight: 800; font-display: swap; src: url("../fonts/ubuntu-sans-latin-800-normal.woff2") format("woff2"); }
+body, button, input, textarea, select { font-family: "Ubuntu Sans", "Segoe UI", Calibri, Roboto, Arial, sans-serif; }
 
-.sheet table.form { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
-.sheet table.form td { border: 1px solid var(--line); padding: 2px 7px; vertical-align: middle; }
-.sheet table.form td.lbl { width: 3.05in; background: var(--label-bg); font-weight: 600; color: #2a3346; }
-.sheet table.form td.val { height: .205in; }
-.sheet tr.sec td { background: var(--navy); color: #fff; font-weight: 700; letter-spacing: .04em; font-size: 9.4pt; padding: 5px 8px; border-color: var(--navy); position: relative; }
-.sheet tr.sec td::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, var(--cyan), var(--violet)); }
-.sheet tr.sec td span.n { color: var(--cyan); margin-right: 6px; padding-left: 4px; }
-.sheet tr.gap td { border: 0; height: 5px; padding: 0; }
-.sheet .req { color: #b3261e; font-weight: 700; }
+/* Barra de herramientas de la plantilla: enlaces y etiquetas con el aspecto de sus botones */
+.toolbar a, .toolbar label.tb { font: inherit; font-weight: 600; font-size: 10pt; cursor: pointer; border-radius: 6px; padding: 8px 16px;
+  text-decoration: none; display: inline-flex; align-items: center; }
+.toolbar a.ghost, .toolbar label.tb.ghost { background: transparent; border: 1px solid #39435c; color: #cdd6ea; }
+.toolbar label.tb:not(.ghost) { color: #fff; background: linear-gradient(90deg, var(--cyan), var(--violet)); }
+.toolbar button.warn { background: #a35200; }
+.toolbar .who { color: #8d98b3; font-size: 9pt; align-self: center; margin-left: 8px; }
+.toolbar button[disabled] { opacity: .6; cursor: progress; }
 
-/* Campos editables con el aspecto de la plantilla */
-.sheet .val input, .sheet .val textarea {
-  width: 100%; border: 0; border-radius: 0; padding: 1px 0; margin: 0; background: transparent; color: var(--ink);
-  font: inherit; line-height: 1.25; box-shadow: none; min-height: 1.25em; display: block;
-}
-.sheet .val textarea { resize: none; overflow: hidden; height: 1.35em; }
+/* Campos del informe con el aspecto de las celdas editables de la plantilla */
+.sheet .val input[type=text], .sheet .val input[type=date], .sheet .val textarea {
+  width: 100%; border: 0; border-radius: 0; padding: 0; margin: 0; background: transparent; color: var(--ink);
+  font: inherit; line-height: 1.25; min-height: 1.25em; display: block; outline: none; box-shadow: none; }
+.sheet .val textarea { resize: none; overflow: hidden; height: 1.3em; }
 .sheet .val input::placeholder, .sheet .val textarea::placeholder { color: #a3acbd; font-style: italic; }
-.sheet .val input:focus, .sheet .val textarea:focus { background: #eefaff; box-shadow: inset 0 -2px 0 var(--cyan); outline: none; }
+.sheet .val input:focus, .sheet .val textarea:focus { background: #eefaff; box-shadow: inset 0 -2px 0 var(--cyan); }
+.sheet .val [contenteditable="false"]:empty::before { content: ""; }
 .sheet .val.autofilled { background: #f3fbff; box-shadow: inset 3px 0 0 var(--cyan); }
 .sheet .val.has-error { background: #fdecec; }
-.sheet .val .field-error { font-size: 7.6pt; margin: 1px 0 0; }
-.sheet .val .ro { white-space: pre-wrap; word-break: break-word; display: block; min-height: 1.25em; }
-
-.sheet .choices { display: flex; gap: 18px; flex-wrap: wrap; }
-.sheet .choices label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; margin: 0; }
-.sheet .choices input { appearance: none; -webkit-appearance: none; width: 12px; height: 12px; margin: 0; padding: 0;
-  border: 1.5px solid #6b7690; border-radius: 2px; display: inline-grid; place-content: center; background: #fff; }
-.sheet .choices input:checked { border-color: var(--violet); background: var(--violet); }
-.sheet .choices input:checked::after { content: "✓"; color: #fff; font-size: 9px; font-weight: 800; line-height: 1; }
-.sheet .choices .box { width: 12px; height: 12px; border: 1.5px solid #6b7690; border-radius: 2px; display: inline-grid; place-content: center; }
-.sheet .choices .box.on { border-color: var(--violet); background: var(--violet); color: #fff; font-size: 9px; font-weight: 800; }
-
-.sheet .registro { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; break-inside: avoid; }
-.sheet .registro .cap { background: var(--label-bg); padding: 5px 8px; font-weight: 700; font-size: 8.8pt; letter-spacing: .04em; border-bottom: 1px solid var(--line); text-transform: uppercase; color: #2a3346; }
-.sheet .registro .grid { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 0; }
-.sheet .registro .cell { padding: 6px 8px 5px; border-right: 1px solid var(--line); min-height: .45in; }
-.sheet .registro .cell:last-child { border-right: 0; }
-.sheet .registro small { display: block; color: var(--muted); font-size: 7.6pt; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-.sheet .firma { display: grid; grid-template-columns: 1fr 1fr; gap: .4in; padding: 6px 24px 6px; }
-.sheet .sig .pad { position: relative; height: .52in; border: 1px dashed #b6c0d2; border-radius: 4px; background: #fbfcfe; touch-action: none; cursor: crosshair; }
-.sheet .sig .pad canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.sheet .sig .pad img { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); object-fit: contain; }
-.sheet .sig .pad .ph { position: absolute; inset: 0; display: grid; place-content: center; color: #a3acbd; font-style: italic; font-size: 8pt; pointer-events: none; }
-.sheet .sig.has .pad .ph { display: none; }
-.sheet .sig.readonly .pad { border: 0; background: none; cursor: default; }
-.sheet .sig .sig-cap { border-top: 1px solid #7a8499; text-align: center; padding-top: 3px; font-size: 8pt; color: var(--muted); }
-.sheet .sig .tools { display: flex; gap: 6px; justify-content: center; margin-top: 4px; flex-wrap: wrap; }
-.sheet .sig .tools button { font: inherit; font-size: 7.8pt; cursor: pointer; border: 1px solid var(--line); background: #fff; color: #2a3346; border-radius: 4px; padding: 2px 8px; min-height: 0; }
-.sheet .sig .tools button:hover { border-color: var(--cyan); }
+.sheet td.lbl label { font: inherit; cursor: pointer; }
+.sheet .req { color: #b3261e; font-weight: 700; }
+.sheet .field-error { color: #b3261e; font-size: 7.6pt; font-weight: 600; margin: 1px 0 0; }
+.sheet .choices input:disabled { opacity: 1; }
 .sheet .sig .tools .status { font-size: 7.6pt; color: var(--muted); align-self: center; }
-.sheet footer.foot { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-size: 7.8pt; color: var(--muted); }
-.sheet footer.foot b { color: var(--ink); }
+.sheet .sig.readonly .pad { border: 0; background: none; cursor: default; }
 
-/* ---------- Barra del informe: foto, autocompletado y acciones ---------- */
-.sheet-toolbar { position: sticky; top: 62px; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
-  padding: 10px 14px; background: var(--navy); border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 8.5in; margin: 0 auto; }
-.sheet-toolbar .hint { color: #8d98b3; font-size: .82rem; }
-.sheet-toolbar .btn-ghost { color: #cdd6ea; border-color: #39435c; }
-.ocr-status { max-width: 8.5in; margin: 10px auto 0; }
+/* Mensajes, estado del OCR y paneles bajo la hoja */
+.panel { width: 8.5in; max-width: calc(100% - 32px); margin: 16px auto; background: #fff; border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(15,23,42,.10); padding: 16px 20px; font-size: 10.5pt; line-height: 1.45; }
+.panel h2 { font-size: 12pt; margin: 0 0 8px; letter-spacing: .02em; }
+.panel p { margin: 6px 0; }
+.panel label { display: block; font-weight: 600; margin: 8px 0 4px; }
+.panel textarea, .panel input[type=text] { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid #b5bfd0; border-radius: 6px; }
+.panel .muted { color: var(--muted); }
+.panel .small { font-size: 9pt; }
+.panel .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.panel.danger-zone { border: 1px solid #f0a8a8; }
+.btn { font: inherit; font-weight: 600; font-size: 10pt; cursor: pointer; border: 0; border-radius: 6px; padding: 8px 16px; color: #fff;
+  background: linear-gradient(90deg, var(--cyan), var(--violet)); text-decoration: none; display: inline-flex; align-items: center; }
+.btn.secondary { background: #fff; color: #2a3346; border: 1px solid var(--line); }
+.btn.warn { background: #a35200; }
+.btn.danger { background: #b3261e; }
+.btn.small { font-size: 8.5pt; padding: 4px 10px; }
+.btn[disabled] { opacity: .6; cursor: progress; }
+.flash { width: 8.5in; max-width: calc(100% - 32px); margin: 12px auto 0; padding: 10px 14px; border-radius: 6px; border: 1px solid; font-size: 10pt; }
+.flash-success { background: #e9f7ef; border-color: #9fd3b0; color: #157a46; }
+.flash-error { background: #fdecec; border-color: #f0a8a8; color: #b3261e; }
+.flash-info { background: #eef6ff; border-color: #a9c3ea; color: #23408e; }
+.notice { width: 8.5in; max-width: calc(100% - 32px); margin: 12px auto 0; padding: 10px 14px; border-radius: 6px; border: 1px solid #a9c3ea; background: #eef6ff; color: #23408e; font-size: 10pt; }
 .ocr-status[hidden] { display: none; }
 .ocr-status .bar { height: 6px; border-radius: 3px; background: var(--label-bg); overflow: hidden; margin-top: 6px; }
 .ocr-status .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--violet)); transition: width .2s; }
-.ocr-status pre { white-space: pre-wrap; max-height: 220px; overflow: auto; background: var(--label-bg); padding: 8px; border-radius: 6px; font-size: .8rem; }
+.ocr-status pre { white-space: pre-wrap; max-height: 220px; overflow: auto; background: var(--label-bg); padding: 8px; border-radius: 6px; font-size: 8.5pt; }
+.page-meta { width: 8.5in; max-width: calc(100% - 32px); margin: 14px auto 0; color: var(--muted); font-size: 9pt; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.page-meta b { color: var(--ink); }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 8.5pt; font-weight: 700; border: 1px solid; }
+.badge-en_elaboracion { background: #eef6ff; color: #23408e; border-color: #a9c3ea; }
+.badge-cerrado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
+.badge-enviado { background: #e9f7ef; color: #157a46; border-color: #9fd3b0; }
+.badge-reabierto { background: #f6e9fb; color: #6a1b8a; border-color: #d3a8e6; }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.gallery figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.gallery figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
 .gallery img { width: 100%; height: 130px; object-fit: cover; display: block; background: var(--label-bg); }
-.gallery figcaption { padding: 6px 8px; font-size: .78rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.gallery figcaption { padding: 6px 8px; font-size: 8pt; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .gallery figcaption form { margin: 0; }
-.lower { max-width: 8.5in; margin: 0 auto; }
+.trace { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.trace th { background: var(--navy); color: #fff; text-align: left; padding: 5px 8px; font-weight: 600; }
+.trace td { border-bottom: 1px solid var(--label-bg); padding: 5px 8px; vertical-align: top; }
 
 @media screen and (max-width: 8.9in) {
-  .sheet { width: auto; min-height: 0; margin: 12px 0; padding: 20px 14px; }
-  .sheet table.form td.lbl { width: 42%; }
-  .sheet .registro .grid { grid-template-columns: 1fr; }
-  .sheet .registro .cell { border-right: 0; border-bottom: 1px solid var(--line); }
-  .sheet .title-row { flex-direction: column; align-items: center; text-align: center; }
-  .sheet .doc-meta { text-align: center; }
-  .sheet .firma { grid-template-columns: 1fr; gap: 16px; padding: 6px 4px; }
-  .sheet .val input, .sheet .val textarea { font-size: 16px; } /* evita el zoom automático en iOS */
-  .sheet-toolbar { top: 0; position: static; }
+  .sheet .val input[type=text], .sheet .val input[type=date], .sheet .val textarea { font-size: 16px; } /* sin zoom en iOS */
+  .toolbar .who { display: none; }
+  .sheet .firma { grid-template-columns: 1fr; gap: 16px; padding: 6px 4px; } /* firmas apiladas en el móvil */
+  .trace thead { display: none; }
+  .trace, .trace tbody, .trace tr, .trace td { display: block; width: 100%; }
+  .trace tr { border-bottom: 2px solid var(--line); padding: 4px 0; }
+  .trace td { border: 0; padding: 2px 0; }
+  .trace td[data-label]::before { content: attr(data-label) ": "; font-weight: 700; color: var(--muted); }
 }
 @media print {
-  .sheet-toolbar, .ocr-status, .lower, .sheet .sig .tools, .sheet .sig .pad .ph { display: none !important; }
-  .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
-  .sheet .sig .pad { border: 0; background: none; }
+  .panel, .flash, .notice, .page-meta, .ocr-status { display: none !important; }
+  .sheet .req, .sheet .field-error { display: none; }
+  .sheet .val.autofilled, .sheet .val.has-error { background: none; box-shadow: none; }
+  .sheet .val input:focus, .sheet .val textarea:focus { background: none; box-shadow: none; }
 }
-.sheet td.lbl label { display: inline; margin: 0; font-weight: inherit; }
-.sheet td.lbl .req { margin-left: 2px; }

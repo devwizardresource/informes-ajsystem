@@ -1,87 +1,58 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1020">
+<title>Formato de Informe – AJ System · {{ report.code }}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v={{ app_version }}">
+{# Estilos de la plantilla del propietario (resources/Plantilla_Informe_AJ_System.html), sin modificar #}
+<link rel="stylesheet" href="{{ url_for('reports.template_css') }}?v={{ sheet_css_version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sheet.css') }}?v={{ app_version }}">
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ app_version }}" defer></script>
+{% if caps.edit %}<script src="{{ url_for('static', filename='js/report.js') }}?v={{ app_version }}" defer></script>{% endif %}
+</head>
+<body>
 {% from "_macros.html" import status_badge with context %}
-{% block title %}Informe {{ report.code }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/sheet.css') }}?v={{ app_version }}">{% endblock %}
-
-{% macro field_input(f, v, editable) -%}
-  {% if not editable %}
-    {% if f.widget == 'radio' %}
-      <div class="choices">{% for o in f.options %}<label><span class="box{{ ' on' if v == o else '' }}">{{ '✓' if v == o else '' }}</span> {{ o }}</label>{% endfor %}</div>
-    {% else %}<span class="ro">{{ v if v not in (none, '') else '' }}</span>{% endif %}
-  {% elif f.widget == 'radio' %}
-    <div class="choices" role="radiogroup" aria-label="{{ f.label }}">
-      {% for o in f.options %}<label><input type="radio" name="{{ f.id }}" value="{{ o }}" {% if v == o %}checked{% endif %}> {{ o }}</label>{% endfor %}
-    </div>
-  {% elif f.type == 'textarea' %}
-    <textarea id="f-{{ f.id }}" name="{{ f.id }}" rows="1" maxlength="{{ f.max_length }}" data-autogrow
-              {% if f.placeholder %}placeholder="{{ f.placeholder }}"{% endif %}>{{ v if v is not none else '' }}</textarea>
-  {% elif f.type == 'select' %}
-    <select id="f-{{ f.id }}" name="{{ f.id }}"><option value="">— Seleccione —</option>
-      {% for o in f.options %}<option value="{{ o }}" {% if v == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select>
-  {% elif f.type == 'checkbox' %}
-    <input type="checkbox" id="f-{{ f.id }}" name="{{ f.id }}" value="1" {% if v %}checked{% endif %}>
-  {% else %}
-    <input id="f-{{ f.id }}" name="{{ f.id }}" type="{{ 'date' if f.type == 'date' else ('number' if f.type == 'integer' else 'text') }}"
-           {% if f.type == 'text' %}maxlength="{{ f.max_length }}"{% endif %} {% if f.placeholder %}placeholder="{{ f.placeholder }}"{% endif %}
-           value="{{ v if v is not none else '' }}">
-  {% endif %}
-{%- endmacro %}
-
-{% macro signature(kind, caption, editable) -%}
-  {% set s = signatures.get(kind) %}
-  <div class="sig{{ ' has' if s else '' }}{{ '' if editable else ' readonly' }}" data-kind="{{ kind }}">
-    <div class="pad">
-      {% if editable %}<canvas></canvas>{% endif %}
-      <img alt="{{ caption }}" {% if s %}src="{{ url_for('reports.attachment_get', report_id=report.id, public_id=s.public_id) }}"{% else %}hidden{% endif %}>
-      {% if editable %}<span class="ph">Firme aquí o cargue una imagen</span>{% endif %}
-    </div>
-    <div class="sig-cap">{{ caption }}</div>
-    {% if editable %}
-    <div class="tools">
-      <button type="button" data-act="save">Guardar firma</button>
-      <button type="button" data-act="load">Cargar imagen</button>
-      <button type="button" data-act="clear">Borrar</button>
-      <input type="file" accept="image/*" hidden>
-      <span class="status" aria-live="polite"></span>
-    </div>
-    {% endif %}
-  </div>
-{%- endmacro %}
-
-{% block content %}
-<div class="page-head">
-  <div>
-    <h1>Informe <code>{{ report.code }}</code> {{ status_badge(report.status_code) }}</h1>
-    <p class="muted small">
-      Elaborado por {{ report.owner_name }} · creado {{ report.created_at|localdt }} · revisión {{ report.revision }}
-      · última modificación {{ report.updated_at|localdt }} por {{ report.updated_by_name }}
-      {% if report.closed_at %} · cerrado {{ report.closed_at|localdt }} por {{ report.closed_by_name }}{% endif %}
-      {% if report.last_sent_at %} · enviado {{ report.last_sent_at|localdt }} por {{ report.sent_by_name }}{% endif %}
-    </p>
-  </div>
-  <div class="inline">
-    {% if caps.download %}<a class="btn btn-dark" href="{{ url_for('reports.download', report_id=report.id) }}">Descargar PDF</a>{% endif %}
-  </div>
-</div>
-
-{% if template.provisional %}<p class="notice">{{ template.notice }}</p>{% endif %}
-{% if pending %}
-<p class="notice notice-info">Solicitud de reapertura pendiente de {{ pending.requested_by_name }} ({{ pending.created_at|localdt }}): «{{ pending.reason }}»</p>
-{% endif %}
-{% if report.status_code in ('CERRADO', 'ENVIADO') %}
-<p class="notice">Informe cerrado: el contenido está bloqueado para edición.{% if caps.request_reopen %} Si necesita corregirlo, solicite la reapertura al jefe o al responsable administrativo (abajo).{% endif %}</p>
-{% endif %}
-
 {% set editable = caps.edit %}
-{% if editable %}
-<div class="sheet-toolbar no-print">
-  <label class="btn btn-primary" for="foto-camara">📷 Tomar foto del equipo</label>
+
+<div class="toolbar">
+  <a class="ghost" href="{{ url_for('reports.index') if has_perm('module.reports') else url_for('home.index') }}">← Volver</a>
+  {% if editable %}
+  <label class="tb" for="foto-camara">📷 Tomar foto del equipo</label>
   <input id="foto-camara" type="file" accept="image/*" capture="environment" hidden data-photo-input>
-  <label class="btn btn-ghost" for="foto-archivo">Subir foto</label>
+  <label class="tb ghost" for="foto-archivo">Subir foto</label>
   <input id="foto-archivo" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-photo-input>
-  <span class="hint">La foto queda anexa al informe y el texto reconocido autocompleta los campos vacíos.</span>
+  <button type="submit" form="report-form" name="accion" value="guardar">Guardar cambios</button>
+  {% if caps.close %}<button type="submit" form="report-form" name="accion" value="cerrar" class="warn"
+      data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado: para volver a editarlo habrá que solicitar la reapertura.">Cerrar informe</button>{% endif %}
+  {% endif %}
+  <button type="button" class="ghost" data-print>Imprimir / Guardar como PDF</button>
+  {% if editable %}<button type="button" class="ghost" data-clear-form>Limpiar formulario</button>{% endif %}
+  {% if caps.download %}<a class="ghost" href="{{ url_for('reports.download', report_id=report.id) }}">Descargar PDF</a>{% endif %}
+  <span class="who">{{ current_user.full_name }} · {{ current_user.role_name }}</span>
 </div>
-<div class="ocr-status card" id="ocr-status" hidden aria-live="polite">
+
+<div class="page-meta">
+  <b>{{ report.code }}</b> {{ status_badge(report.status_code) }}
+  <span>Elaborado por {{ report.owner_name }} · creado {{ report.created_at|localdt }} · revisión {{ report.revision }}
+  · última modificación {{ report.updated_at|localdt }} por {{ report.updated_by_name }}
+  {% if report.closed_at %} · cerrado {{ report.closed_at|localdt }}{% endif %}
+  {% if report.last_sent_at %} · enviado {{ report.last_sent_at|localdt }}{% endif %}</span>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}<div class="flash flash-{{ category }}" role="status">{{ message }}</div>{% endfor %}
+{% endwith %}
+{% if pending %}<p class="notice">Solicitud de reapertura pendiente de {{ pending.requested_by_name }} ({{ pending.created_at|localdt }}): «{{ pending.reason }}»</p>{% endif %}
+{% if report.status_code in ('CERRADO', 'ENVIADO') %}
+<p class="notice">Informe cerrado: el contenido está bloqueado.{% if caps.request_reopen %} Para corregirlo, solicite permiso al jefe o al responsable (abajo).{% endif %}</p>
+{% elif editable %}
+<p class="notice">Escriba en la hoja o tome una foto clara de las características del equipo: los campos vacíos se completan solos. «Guardar cambios» conserva el informe abierto.</p>
+{% endif %}
+
+{% if editable %}
+<div class="panel ocr-status" id="ocr-status" hidden aria-live="polite">
   <strong data-ocr-title>Procesando foto…</strong>
   <div class="bar"><i data-ocr-bar></i></div>
   <p class="small muted" data-ocr-msg></p>
@@ -97,67 +68,21 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="revision" value="{{ report.revision }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">
-  <div class="sheet-wrap">
-  <article class="sheet">
-    <header class="head">
-      <div class="logo-badge"><img src="{{ url_for('static', filename='img/logo-aj-system@2x.png') }}?v={{ app_version }}" alt="AJ System" height="61" width="150"></div>
-      <div class="accent"></div>
-      <div class="title-row">
-        <h1>Formato de Informe</h1>
-        <div class="doc-meta">Informe N.º <b>{{ number }}</b> de <b>{{ year }}</b></div>
-      </div>
-    </header>
-
-    <table class="form">
-      {% for sec in template.sections %}
-        {% if sec.title %}
-        <tr class="gap"><td colspan="2"></td></tr>
-        <tr class="sec"><td colspan="2">{% if sec.number %}<span class="n">{{ sec.number }}.</span>{% endif %}{{ sec.title }}</td></tr>
-        {% endif %}
-        {% for f in sec.fields %}{% set v = values.get(f.id) %}
-        <tr>
-          <td class="lbl">{% if editable %}<label for="f-{{ f.id }}">{{ f.label }}</label>{% else %}{{ f.label }}{% endif %}{% if editable and f.required_on_close %} <span class="req" title="Obligatorio para cerrar">*</span>{% endif %}</td>
-          <td class="val{{ ' has-error' if errors.get(f.id) else '' }}" data-field="{{ f.id }}">
-            {{ field_input(f, v, editable) }}
-            {% if errors.get(f.id) %}<p class="field-error" role="alert">{{ errors[f.id] }}</p>{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      {% endfor %}
-    </table>
-
-    <section class="registro">
-      <div class="cap">Registro de quien realizó el informe</div>
-      <div class="grid">
-        <div class="cell"><small>Usuario</small>{{ report.owner_username }}</div>
-        <div class="cell"><small>Nombre completo</small>{{ report.owner_name }}</div>
-        <div class="cell"><small>N.º de identificación</small>{{ report.owner_id_number or '' }}</div>
-      </div>
-      <div class="firma">
-        {{ signature('FIRMA_ELABORA', 'Firma digital de quien elabora', editable) }}
-        {{ signature('FIRMA_RECIBE', 'Firma digital de quien recibe / aprueba', editable) }}
-      </div>
-    </section>
-
-    <footer class="foot"><span><b>AJ System</b>, todos los derechos reservados.</span><span>Formato de Informe</span></footer>
-  </article>
-  </div>
-
-  {% if editable %}
-  <div class="lower">
-    <p class="small muted"><span class="req">*</span> Obligatorio para cerrar el informe. «Guardar cambios» conserva el informe abierto para seguir editándolo.</p>
-    <div class="actions">
-      <button type="submit" name="accion" value="guardar" class="btn btn-primary">Guardar cambios</button>
-      {% if caps.close %}
-      <button type="submit" name="accion" value="cerrar" class="btn btn-warn"
-              data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Se guardarán los datos actuales y el informe quedará bloqueado: para volver a editarlo habrá que solicitar la reapertura.">Cerrar informe y registrar</button>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
+  {{ sheet_html|safe }}{# HTML generado por reports/sheet.py: todos los valores van escapados #}
 </form>
 
-<section class="card lower" id="anexo">
+{% if editable %}
+<div class="panel">
+  <p class="small muted"><span class="req">*</span> Obligatorio para cerrar el informe.</p>
+  <div class="actions">
+    <button type="submit" form="report-form" name="accion" value="guardar" class="btn">Guardar cambios</button>
+    {% if caps.close %}<button type="submit" form="report-form" name="accion" value="cerrar" class="btn warn"
+        data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado: para volver a editarlo habrá que solicitar la reapertura.">Cerrar informe y registrar</button>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<section class="panel" id="anexo">
   <h2>Anexo fotográfico ({{ photos|length }})</h2>
   <p class="small muted">Fotos del equipo en orden cronológico. Se incluyen en el PDF del informe.</p>
   <div class="gallery" data-gallery>
@@ -170,7 +95,7 @@
         {% if editable %}
         <form method="post" action="{{ url_for('reports.attachment_remove', report_id=report.id, public_id=a.public_id) }}" data-busy>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-danger" data-confirm="¿Retirar esta foto del informe?">Retirar</button>
+          <button type="submit" class="btn small danger" data-confirm="¿Retirar esta foto del informe?">Retirar</button>
         </form>
         {% endif %}
       </figcaption>
@@ -182,17 +107,17 @@
 </section>
 
 {% if caps.send %}
-<form class="card lower" method="post" action="{{ url_for('reports.send', report_id=report.id) }}" data-busy>
+<form class="panel" method="post" action="{{ url_for('reports.send', report_id=report.id) }}" data-busy>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">
   <h2>Enviar informe</h2>
   <p>El informe está cerrado. Al enviarlo quedará disponible para el responsable administrativo y el jefe.</p>
-  <button type="submit" class="btn btn-primary" data-confirm="¿Enviar el informe {{ report.code }}?">Enviar informe</button>
+  <button type="submit" class="btn" data-confirm="¿Enviar el informe {{ report.code }}?">Enviar informe</button>
 </form>
 {% endif %}
 
 {% if caps.resolve_request %}
-<form class="card lower" method="post" action="{{ url_for('reports.resolve_request', report_id=report.id) }}" data-busy>
+<form class="panel" method="post" action="{{ url_for('reports.resolve_request', report_id=report.id) }}" data-busy>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">
   <h2>Solicitud de reapertura</h2>
@@ -200,57 +125,67 @@
   <label for="nota">Nota de la decisión (obligatoria para rechazar, mínimo 10 caracteres)</label>
   <textarea id="nota" name="nota" rows="2" maxlength="1000"></textarea>
   <div class="actions">
-    <button type="submit" name="decision" value="aprobar" class="btn btn-primary" data-confirm="¿Aprobar y reabrir el informe {{ report.code }}?">Aprobar y reabrir</button>
-    <button type="submit" name="decision" value="rechazar" class="btn btn-danger" data-confirm="¿Rechazar la solicitud?">Rechazar</button>
+    <button type="submit" name="decision" value="aprobar" class="btn" data-confirm="¿Aprobar y reabrir el informe {{ report.code }}?">Aprobar y reabrir</button>
+    <button type="submit" name="decision" value="rechazar" class="btn danger" data-confirm="¿Rechazar la solicitud?">Rechazar</button>
   </div>
 </form>
 {% elif caps.reopen %}
-<form class="card lower" method="post" action="{{ url_for('reports.reopen', report_id=report.id) }}" data-busy>
+<form class="panel" method="post" action="{{ url_for('reports.reopen', report_id=report.id) }}" data-busy>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">
   <h2>Reabrir para editar</h2>
   <label for="motivo">Motivo de la reapertura (obligatorio, mínimo 10 caracteres)</label>
   <textarea id="motivo" name="motivo" rows="3" minlength="10" maxlength="1000" required></textarea>
-  <button type="submit" class="btn btn-warn" data-confirm="¿Reabrir el informe {{ report.code }}? Quedará registrado con su usuario y motivo.">Reabrir informe</button>
+  <div class="actions"><button type="submit" class="btn warn" data-confirm="¿Reabrir el informe {{ report.code }}? Quedará registrado con su usuario y motivo.">Reabrir informe</button></div>
 </form>
 {% endif %}
 
 {% if caps.request_reopen %}
-<form class="card lower" method="post" action="{{ url_for('reports.request_reopen', report_id=report.id) }}" data-busy>
+<form class="panel" method="post" action="{{ url_for('reports.request_reopen', report_id=report.id) }}" data-busy>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">
   <h2>Solicitar permiso para editar</h2>
   <label for="motivo-sol">¿Qué necesita corregir? (mínimo 10 caracteres)</label>
   <textarea id="motivo-sol" name="motivo" rows="3" minlength="10" maxlength="1000" required></textarea>
-  <button type="submit" class="btn btn-primary">Enviar solicitud al jefe / responsable</button>
+  <div class="actions"><button type="submit" class="btn">Enviar solicitud al jefe / responsable</button></div>
 </form>
 {% endif %}
 
-<section class="card lower">
+<section class="panel">
   <h2>Trazabilidad</h2>
-  <div class="table-wrap">
-  <table class="table">
+  <table class="trace">
     <thead><tr><th scope="col">Fecha</th><th scope="col">Operación</th><th scope="col">Usuario</th><th scope="col">Estado</th><th scope="col">Rev.</th><th scope="col">Motivo</th></tr></thead>
     <tbody>
     {% for h in history %}
       <tr>
-        <td data-label="Fecha" class="nowrap">{{ h.created_at|localdt('%Y-%m-%d %H:%M:%S') }}</td>
+        <td data-label="Fecha">{{ h.created_at|localdt('%Y-%m-%d %H:%M:%S') }}</td>
         <td data-label="Operación">{{ {'CREAR':'Creación','GUARDAR':'Guardado','CERRAR':'Cierre','ENVIAR':'Envío','REABRIR':'Reapertura','SOLICITAR_REAPERTURA':'Solicitud de reapertura','RECHAZAR_REAPERTURA':'Solicitud rechazada'}[h.action] }}</td>
         <td data-label="Usuario">{{ h.full_name }}</td>
         <td data-label="Estado">{% if h.from_status and h.from_status != h.to_status %}{{ STATUS_LABELS[h.from_status] }} → {% endif %}{{ STATUS_LABELS[h.to_status] }}</td>
         <td data-label="Rev.">{{ h.revision }}</td>
-        <td data-label="Motivo" class="pre">{{ h.reason or '' }}</td>
+        <td data-label="Motivo">{{ h.reason or '' }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  </div>
   <details>
-    <summary>Versiones guardadas ({{ versions|length }})</summary>
-    <ul class="versions">
+    <summary class="small">Versiones guardadas ({{ versions|length }})</summary>
+    <ul class="small">
       {% for v in versions %}<li>Rev. {{ v.revision }} · {{ v.saved_at|localdt('%Y-%m-%d %H:%M:%S') }} · {{ v.full_name }} · <code title="SHA-256 del contenido">{{ v.content_sha256[:16] }}…</code></li>{% endfor %}
     </ul>
   </details>
 </section>
-{% endblock %}
-{% block scripts %}{% if caps.edit %}<script src="{{ url_for('static', filename='js/report.js') }}?v={{ app_version }}" defer></script>{% endif %}{% endblock %}
+
+{% if caps.delete %}
+<form class="panel danger-zone" method="post" action="{{ url_for('reports.delete', report_id=report.id) }}" data-busy>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="op_id" value="{{ new_op_id() }}">
+  <h2>Eliminar informe</h2>
+  <p class="small muted">Solo el responsable administrativo. El informe desaparece de todas las vistas; la eliminación queda registrada en la auditoría y se puede restaurar desde «Informes eliminados».</p>
+  <label for="motivo-del">Motivo de la eliminación (obligatorio, mínimo 10 caracteres)</label>
+  <textarea id="motivo-del" name="motivo" rows="2" minlength="10" maxlength="1000" required></textarea>
+  <div class="actions"><button type="submit" class="btn danger" data-confirm="¿Eliminar el informe {{ report.code }}?">Eliminar informe</button></div>
+</form>
+{% endif %}
+</body>
+</html>

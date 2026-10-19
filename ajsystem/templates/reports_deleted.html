@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Informes eliminados{% endblock %}
+{% block content %}
+<h1>Informes eliminados</h1>
+<p class="muted small">Solo el responsable administrativo. Los informes eliminados no aparecen en ninguna vista; su historial y la auditoría se conservan y pueden restaurarse.</p>
+{% if rows %}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca · Serie</th><th scope="col">Técnico</th><th scope="col">Estado</th><th scope="col">Eliminado</th><th scope="col">Motivo</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td data-label="Informe"><code>{{ r.code }}</code></td>
+      <td data-label="Equipo">{{ r.title or '—' }}</td>
+      <td data-label="Marca · Serie">{{ r.equipment_brand or '—' }}{% if r.equipment_serial %} · <code>{{ r.equipment_serial }}</code>{% endif %}</td>
+      <td data-label="Técnico">{{ r.owner_name }}</td>
+      <td data-label="Estado">{{ status_badge(r.status_code) }}</td>
+      <td data-label="Eliminado" class="nowrap">{{ r.deleted_at|localdt }}<br><small class="muted">{{ r.deleted_by_name }}</small></td>
+      <td data-label="Motivo" class="pre">{{ r.deletion_reason }}</td>
+      <td>
+        <form method="post" action="{{ url_for('reports.restore', report_id=r.id) }}" class="inline" data-busy>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm" data-confirm="¿Restaurar el informe {{ r.code }}?">Restaurar</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty"><strong>No hay informes eliminados.</strong></div>
+{% endif %}
+{% endblock %}

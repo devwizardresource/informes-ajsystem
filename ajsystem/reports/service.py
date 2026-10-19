@@ -60,11 +60,12 @@ def _loads(value):
 # ---------------------------------------------------------------------------
 def visibility_clause(user: dict, alias: str = "r") -> tuple[str, tuple]:
     """Filtro SQL que limita los informes visibles. Se aplica en TODAS las consultas."""
+    alive = f"{alias}.deleted_at IS NULL"  # los informes eliminados no aparecen en ninguna consulta
     if "report.view_all" in user["permissions"]:
-        return "1=1", ()
+        return alive, ()
     if "report.view_sent" in user["permissions"]:
-        return f"({alias}.owner_id = %s OR {alias}.first_sent_at IS NOT NULL)", (user["id"],)
-    return f"{alias}.owner_id = %s", (user["id"],)
+        return f"{alive} AND ({alias}.owner_id = %s OR {alias}.first_sent_at IS NOT NULL)", (user["id"],)
+    return f"{alive} AND {alias}.owner_id = %s", (user["id"],)
 
 
 def capabilities(report: dict, user: dict, pending_request: dict | None = None) -> dict:
@@ -82,6 +83,7 @@ def capabilities(report: dict, user: dict, pending_request: dict | None = None) 
                            and status in CLOSED and pending_request is None),
         "resolve_request": "report.reopen" in perms and pending_request is not None and status in CLOSED,
         "download": "report.download" in perms,
+        "delete": "report.delete" in perms,
     }
 
 
@@ -412,6 +414,57 @@ def resolve_request(report_id: int, user: dict, approve: bool, note: str, idem_k
     return {"already": False}
 
 
+def delete(report_id: int, user: dict, reason: str, idem_key: str | None) -> dict:
+    """Eliminación por el responsable administrativo: el informe deja de verse en toda la aplicación.
+
+    Es lógica (deleted_at): el historial, las versiones, los adjuntos y la auditoría se conservan,
+    porque borrarlos rompería la cadena de integridad; el responsable puede restaurarlo.
+    """
+    _check_idem(idem_key)
+    if "report.delete" not in user["permissions"]:
+        raise ReportError("Solo el responsable administrativo puede eliminar informes.", status=403)
+    reason = _check_reason(reason)
+    with db.transaction() as cur:
+        report = _lock_visible(cur, report_id, user)
+        now = db.utcnow()
+        cur.execute("UPDATE reports SET deleted_at = %s, deleted_by = %s, deletion_reason = %s "
+                    "WHERE id = %s AND deleted_at IS NULL", (now, user["id"], reason, report_id))
+        if cur.rowcount != 1:
+            raise ReportNotFound()
+        # Una solicitud de reapertura pendiente deja de tener sentido.
+        cur.execute("UPDATE reopen_requests SET status = 'RECHAZADA', resolved_by = %s, resolved_at = %s, "
+                    "resolution_note = %s WHERE report_id = %s AND status = 'PENDIENTE'",
+                    (user["id"], now, "Informe eliminado por el responsable administrativo.", report_id))
+        audit.write(cur, audit.REPORT_DELETED, "EXITO", object_type="informe", object_id=report["code"],
+                    detail={"informe_id": report_id, "estado": report["status_code"], "motivo": reason,
+                            "titulo": report["title"], "marca": report.get("equipment_brand"),
+                            "serie": report["equipment_serial"]})
+    return {"code": report["code"]}
+
+
+def restore(report_id: int, user: dict) -> dict:
+    if "report.delete" not in user["permissions"]:
+        raise ReportError("Solo el responsable administrativo puede restaurar informes.", status=403)
+    with db.transaction() as cur:
+        cur.execute("SELECT id, code FROM reports WHERE id = %s AND deleted_at IS NOT NULL FOR UPDATE", (report_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise ReportNotFound()
+        cur.execute("UPDATE reports SET deleted_at = NULL, deleted_by = NULL, deletion_reason = NULL WHERE id = %s",
+                    (report_id,))
+        audit.write(cur, audit.REPORT_RESTORED, "EXITO", object_type="informe", object_id=row["code"],
+                    detail={"informe_id": report_id})
+    return {"code": row["code"]}
+
+
+def deleted(limit: int = 200) -> list[dict]:
+    return db.query_all(
+        """SELECT r.id, r.code, r.title, r.equipment_brand, r.equipment_serial, r.status_code, r.deleted_at,
+                  r.deletion_reason, o.full_name AS owner_name, d.full_name AS deleted_by_name
+             FROM reports r JOIN users o ON o.id = r.owner_id JOIN users d ON d.id = r.deleted_by
+            WHERE r.deleted_at IS NOT NULL ORDER BY r.deleted_at DESC LIMIT %s""", (limit,))
+
+
 def pending_request_for(report_id: int) -> dict | None:
     return db.query_one(
         """SELECT q.id, q.reason, q.created_at, u.full_name AS requested_by_name
@@ -455,7 +508,7 @@ def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dic
     return db.query_all(
         f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.revision,
                    r.created_at, r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count
-              FROM reports r WHERE r.owner_id = %s AND r.status_code IN ({placeholders})
+              FROM reports r WHERE r.owner_id = %s AND r.deleted_at IS NULL AND r.status_code IN ({placeholders})
              ORDER BY r.updated_at DESC LIMIT %s""", (user["id"], *statuses, limit))
 
 

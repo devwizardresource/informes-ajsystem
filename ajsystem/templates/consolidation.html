@@ -2,7 +2,8 @@
 {% from "_macros.html" import status_badge, pagination with context %}
 {% block title %}Consolidación de informes{% endblock %}
 {% block content %}
-<h1>Consolidación de informes</h1>
+<div class="page-head"><h1>Consolidación de informes</h1>
+  {% if has_perm('report.delete') %}<a class="btn btn-ghost" href="{{ url_for('reports.deleted_index') }}">Informes eliminados</a>{% endif %}</div>
 <form class="card filters" method="get" action="{{ url_for('consolidation.index') }}">
   <div><label for="codigo">Identificador</label><input id="codigo" name="codigo" value="{{ filters.code }}" maxlength="40"></div>
   <div><label for="tecnico">Técnico</label>

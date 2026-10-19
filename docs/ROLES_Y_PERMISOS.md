@@ -30,6 +30,7 @@ El nombre visible se cambia sin tocar el código, desde **Usuarios → Nombres v
 | `report.reopen` | ✔ | ✔ | ✘ |
 | `report.download` | ✔ | ✔ | ✘ |
 | `audit.read` / `audit.verify` · incluye **Entradas y salidas de sesión** (usuario, entrada, salida, IP, sistema operativo) | ✔ | ✔ | ✘ |
+| `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ |
 | `users.manage` | ✔ | ✘ | ✘ |
 
 Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la ruta y la cuenta de base de datos de la aplicación carece de `UPDATE`/`DELETE` sobre esas tablas.
@@ -54,3 +55,9 @@ Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la
 3. «Pendientes de revisión» se interpreta, por ahora, como los informes enviados alguna vez que están reabiertos, o cerrados sin reenviar. No existe un estado formal de «revisado»; si se necesita, debe definirse como regla de negocio nueva.
 4. La gestión de usuarios (altas, roles, activación, restablecimiento de contraseña) corresponde solo al responsable administrativo.
 5. Cambiar el rol, desactivar una cuenta o restablecer su contraseña **revoca las sesiones abiertas** de ese usuario. No se puede desactivar ni degradar al último responsable activo.
+
+## Eliminación de informes (responsable administrativo)
+
+El responsable (admin) elimina un informe desde su página («Eliminar informe», motivo obligatorio). Desaparece de todas las vistas y consultas para todos los perfiles, también para su autor. La eliminación es **lógica**: el historial, las fotos y el registro de auditoría se conservan, porque borrar filas rompería la cadena de integridad HMAC. Desde **Inicio → Informes eliminados** (o Consolidación) puede consultarlos y **restaurarlos**. Eliminar y restaurar quedan en el registro detallado (`INFORME_ELIMINADO`, `INFORME_RESTAURADO`).
+
+Los eventos del registro detallado (auditoría) **no** se pueden eliminar desde la aplicación: es la garantía de que el registro de accesos es fiable.

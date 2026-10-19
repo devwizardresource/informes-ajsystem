@@ -14,6 +14,11 @@
     });
   }
 
+  // «Imprimir / Guardar como PDF» de la plantilla
+  document.querySelectorAll("[data-print]").forEach(function (b) {
+    b.addEventListener("click", function () { window.print(); });
+  });
+
   // Áreas de texto que crecen con su contenido (celdas del formato de informe)
   function grow(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
   document.querySelectorAll("textarea[data-autogrow]").forEach(function (t) {

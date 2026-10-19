@@ -2,13 +2,15 @@
 
 ## Estado
 
-La plantilla oficial **«Formato de Informe AJ System»** está integrada (`aj_v1`) y es la predeterminada:
+La plantilla oficial es **el archivo del propietario `resources/Plantilla_Informe_AJ_System.html`**, y la aplicación lo usa directamente (no una copia):
 
-| Pieza | Archivo |
+| Pieza | Cómo |
 |---|---|
-| Campos, secciones y validación | `ajsystem/report_templates/aj_v1.json` |
-| Captura en pantalla (misma maquetación que la referencia, editable, adaptable a móvil) | `templates/report_detail.html` + `static/css/sheet.css` |
-| PDF (tamaño carta, una hoja + anexo fotográfico) | `document_templates/aj_v1.html` + `document_templates/assets/` (logo y Ubuntu Sans TTF) |
+| Hoja de trabajo del informe (pantalla) | `reports/sheet.py` lee el archivo, sirve su `<style>` en `/informes/plantilla.css` (la CSP no admite estilos en línea) y convierte cada celda de valor en el campo correspondiente, emparejando por la etiqueta de la fila. La página del informe es la plantilla a página completa, con su barra de herramientas («Imprimir / Guardar como PDF», «Limpiar formulario») más Foto, Guardar y Cerrar |
+| PDF | La misma hoja y el mismo CSS, con el `@media print` de la plantilla, generados por WeasyPrint (`document_templates/aj_v1.html` solo añade la fuente y el anexo fotográfico) |
+| Campos y validación | `report_templates/aj_v1.json`: las etiquetas deben coincidir con las de la plantilla; la aplicación **no arranca** si falta alguna fila |
+
+Si el propietario modifica el archivo (textos, colores, orden de filas), la pantalla y el PDF siguen el cambio sin tocar código. Si añade o renombra una fila, hay que reflejarlo en `aj_v1.json`.
 
 Diferencias con la referencia, intencionadas:
 - Se añadió la fila **«Marca»** en la sección 1: los equipos se indexan y ordenan por marca y número de serie (Consolidación → «Ordenar por: Marca y número de serie»).

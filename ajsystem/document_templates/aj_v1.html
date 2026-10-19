@@ -3,60 +3,25 @@
 <head>
 <meta charset="utf-8">
 <title>Formato de Informe – AJ System · {{ doc.meta.codigo }}</title>
+{# Estilos de resources/Plantilla_Informe_AJ_System.html, tal cual (WeasyPrint aplica su @media print) #}
+<style>{{ doc.css_plantilla|safe }}</style>
 <style>
-  /* Réplica de la plantilla de referencia Plantilla_Informe_AJ_System.html (impresión) para WeasyPrint. */
+  /* Solo añadidos: fuente Ubuntu Sans, celdas de solo lectura y anexo fotográfico. */
   @font-face { font-family: "Ubuntu Sans"; font-weight: 400; src: url("assets/UbuntuSans-400.ttf"); }
   @font-face { font-family: "Ubuntu Sans"; font-weight: 500; src: url("assets/UbuntuSans-500.ttf"); }
   @font-face { font-family: "Ubuntu Sans"; font-weight: 600; src: url("assets/UbuntuSans-600.ttf"); }
   @font-face { font-family: "Ubuntu Sans"; font-weight: 700; src: url("assets/UbuntuSans-700.ttf"); }
   @font-face { font-family: "Ubuntu Sans"; font-weight: 800; src: url("assets/UbuntuSans-800.ttf"); }
-  :root { --ink:#121826; --muted:#5b6475; --line:#cfd6e3; --label-bg:#f2f5fa; --navy:#0b1020; --cyan:#1ec8f5; --violet:#a24cf0; }
-  @page { size: letter; margin: 0.4in 0.55in 0.5in;
-          @bottom-center { content: element(pie); width: 100%; vertical-align: top; } }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { background: #fff; color: #121826; font-family: "Ubuntu Sans", "DejaVu Sans", sans-serif; font-size: 9pt; line-height: 1.25; }
-
-  header.head { text-align: center; }
-  .logo-badge { display: inline-block; line-height: 0; }
-  .logo-badge img { height: 0.64in; width: auto; display: block; }
-  .accent { height: 3px; margin: 8px 0 0; border-radius: 2px; background: linear-gradient(90deg, #1ec8f5, #a24cf0); }
-  .title-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px; }
-  .title-row h1 { margin: 0; font-size: 14pt; letter-spacing: .06em; font-weight: 800; text-transform: uppercase; }
-  .doc-meta { font-size: 8.5pt; color: #5b6475; text-align: right; white-space: nowrap; }
-  .doc-meta b { display: inline-block; min-width: .9in; border-bottom: 1px solid #cfd6e3; text-align: center; color: #121826; font-weight: 700; }
-
-  table.form { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
-  table.form td { border: 1px solid #cfd6e3; padding: 1.5px 7px; vertical-align: middle; }
-  table.form td.lbl { width: 3.05in; background: #f2f5fa; font-weight: 600; color: #2a3346; }
-  table.form td.val { height: .205in; white-space: pre-wrap; word-wrap: break-word; }
-  tr.sec td { background: #0b1020; color: #fff; font-weight: 700; letter-spacing: .04em; font-size: 9.4pt; padding: 5px 8px; border-color: #0b1020; position: relative; }
-  tr.sec td::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, #1ec8f5, #a24cf0); }
-  tr.sec td span.n { color: #1ec8f5; margin-right: 6px; padding-left: 4px; }
-  tr.gap td { border: 0; height: 5px; padding: 0; }
-  tr { break-inside: avoid; }
-
-  .choices { white-space: nowrap; }
-  .choices span.opt { display: inline-block; margin-right: 18px; font-weight: 500; white-space: nowrap; }
-  .box { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -2px; border: 1.5px solid #6b7690; border-radius: 2px; text-align: center; font-size: 8px; line-height: 9px; font-weight: 800; color: #fff; }
-  .box.on { border-color: #a24cf0; background: #a24cf0; }
-
-  .registro { margin-top: 10px; border: 1px solid #cfd6e3; border-radius: 6px; overflow: hidden; break-inside: avoid; }
-  .registro .cap { background: #f2f5fa; padding: 5px 8px; font-weight: 700; font-size: 8.8pt; letter-spacing: .04em; border-bottom: 1px solid #cfd6e3; text-transform: uppercase; color: #2a3346; }
-  .registro table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .registro table.grid td { padding: 5px 8px 4px; border-right: 1px solid #cfd6e3; vertical-align: top; height: .36in; }
-  .registro table.grid td:last-child { border-right: 0; }
-  .registro small { display: block; color: #5b6475; font-size: 7.6pt; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
-  .firma { width: 100%; border-collapse: separate; border-spacing: .4in 0; padding: 0 24px; table-layout: fixed; }
-  .firma td { padding: 6px 0; vertical-align: bottom; }
-  .firma .pad { height: .52in; text-align: center; }
-  .firma .pad img { max-height: .5in; max-width: 100%; }
-  .firma .sig-cap { border-top: 1px solid #7a8499; text-align: center; padding-top: 3px; font-size: 8pt; color: #5b6475; }
-
-  footer.foot { position: running(pie); width: 100%; padding-top: 6px; border-top: 1px solid #cfd6e3; display: flex; justify-content: space-between; font-size: 7.8pt; color: #5b6475; }
-  footer.foot b { color: #121826; }
-
-  /* Anexo fotográfico (páginas siguientes) */
+  body { font-family: "Ubuntu Sans", "DejaVu Sans", sans-serif; }
+  .sheet .val [contenteditable] { white-space: pre-wrap; }
+  .sheet .choices .box { display: inline-block; flex: none; width: 12px; min-width: 12px; height: 12px; border: 1.5px solid #6b7690; border-radius: 2px;
+    vertical-align: -2px; text-align: center; color: #fff; font-size: 9px; font-weight: 800; line-height: 9px; }
+  .sheet .choices .box.on { border-color: #a24cf0; background: #a24cf0; }
+  /* La fila «Marca» añadida: se compactan 1,5 px las celdas para que la hoja siga cabiendo en una página. */
+  table.form td { padding-top: 1.5px; padding-bottom: 1.5px; }
+  .choices label { white-space: nowrap; }
+  .registro .cell { padding-top: 5px; padding-bottom: 4px; }
+  .sheet .sig .pad img { position: static; display: block; margin: 0 auto; max-width: 100%; max-height: .5in; width: auto; height: auto; }
   .anexo { break-before: page; }
   .anexo-head { background: #0b1020; color: #fff; font-weight: 700; letter-spacing: .04em; font-size: 9.4pt; padding: 5px 8px 5px 13px; position: relative; }
   .anexo-head::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, #1ec8f5, #a24cf0); }
@@ -70,45 +35,7 @@
 </style>
 </head>
 <body>
-<footer class="foot"><span><b>AJ System</b>, todos los derechos reservados.</span><span>Formato de Informe</span></footer>
-{% set v = doc.valores %}
-<header class="head">
-  <div class="logo-badge"><img src="assets/logo-aj-system.png" alt="AJ System"></div>
-  <div class="accent"></div>
-  <div class="title-row">
-    <h1>Formato de Informe</h1>
-    <div class="doc-meta">Informe N.º <b>{{ doc.numero }}</b> de <b>{{ doc.anio }}</b></div>
-  </div>
-</header>
-
-<table class="form">
-  {% for sec in doc.secciones_plantilla %}
-    {% if sec.title %}
-    <tr class="gap"><td colspan="2"></td></tr>
-    <tr class="sec"><td colspan="2">{% if sec.number %}<span class="n">{{ sec.number }}.</span>{% endif %}{{ sec.title }}</td></tr>
-    {% endif %}
-    {% for f in sec.fields %}
-    <tr><td class="lbl">{{ f.label }}</td><td class="val">
-      {%- if f.widget == 'radio' -%}
-        <div class="choices">{% for o in f.options %}<span class="opt"><span class="box{{ ' on' if v[f.id] == o else '' }}">{{ '✓' if v[f.id] == o else '' }}</span> {{ o }}</span>{% endfor %}</div>
-      {%- else -%}{{ v[f.id] }}{%- endif -%}
-    </td></tr>
-    {% endfor %}
-  {% endfor %}
-</table>
-
-<section class="registro">
-  <div class="cap">Registro de quien realizó el informe</div>
-  <table class="grid"><tr>
-    <td style="width:28.6%"><small>Usuario</small>{{ doc.registro.usuario }}</td>
-    <td style="width:42.8%"><small>Nombre completo</small>{{ doc.registro.nombre }}</td>
-    <td><small>N.º de identificación</small>{{ doc.registro.identificacion }}</td>
-  </tr></table>
-  <table class="firma"><tr>
-    <td><div class="pad">{% if doc.firmas.FIRMA_ELABORA %}<img src="{{ doc.firmas.FIRMA_ELABORA }}" alt="">{% endif %}</div><div class="sig-cap">Firma digital de quien elabora</div></td>
-    <td><div class="pad">{% if doc.firmas.FIRMA_RECIBE %}<img src="{{ doc.firmas.FIRMA_RECIBE }}" alt="">{% endif %}</div><div class="sig-cap">Firma digital de quien recibe / aprueba</div></td>
-  </tr></table>
-</section>
+{{ doc.hoja|safe }}
 
 {% if doc.fotos %}
 <section class="anexo">

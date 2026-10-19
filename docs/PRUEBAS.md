@@ -11,7 +11,7 @@ Las pruebas usan **MySQL real** (no simulado). Crean una base aislada `ajsys_tes
 ## Resultado de la última ejecución
 
 - **Fecha:** 2026-10-19 · **Entorno:** Ubuntu 24.04, Python 3.12.3
-- **MySQL 8.4:** `96 passed`. **MariaDB 11.4** (motor de Hostinger): `96 passed` (respaldos con `mariadb-dump`). 0 fallidas, 0 omitidas.
+- **MySQL 8.4:** `99 passed`. **MariaDB 11.4** (motor de Hostinger): `99 passed` (respaldos con `mariadb-dump`). 0 fallidas, 0 omitidas.
 - La CI de GitHub repite ambas ejecuciones en cada push.
 - Aviso no bloqueante: WeasyPrint recomienda instalar `libharfbuzz-subset` (ver PLANTILLA_PDF.md).
 - Las líneas `ERROR ... Error no controlado` de la salida corresponden a los **fallos simulados a propósito** en las pruebas de reversión.
@@ -55,6 +55,8 @@ Las pruebas usan **MySQL real** (no simulado). Crean una base aislada `ajsys_tes
 | Autocompletado desde el texto de la foto | `test_autocompletar_desde_texto_de_foto`, `test_extractor_de_texto[...]` |
 | Importación Excel/CSV (un informe por equipo) | `test_importar_excel_crea_un_informe_por_equipo`, `test_importar_csv_y_archivo_invalido`, `test_plantilla_de_importacion_descargable` |
 | PDF idéntico a la plantilla: una hoja + anexo fotográfico | `test_pdf_incluye_anexo_fotografico` |
+| La hoja es el archivo de `resources/` (CSS y estructura) y escapa los valores | `test_la_hoja_es_la_plantilla_de_resources`, `test_valores_escapados_en_la_hoja` |
+| El admin elimina (con motivo) y restaura; técnico y jefe no pueden | `test_admin_elimina_y_restaura_informes` |
 
 Pruebas adicionales de seguridad: CSRF, `Origin` externo, fijación de sesión, cambio obligatorio de contraseña, cabeceras, errores sin detalles internos, ausencia de contraseñas en la auditoría, redirección abierta, XSS, comodines `LIKE`, configuración insegura, revocación de sesiones al cambiar el rol y cuentas desactivadas.
 

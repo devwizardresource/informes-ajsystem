@@ -9,7 +9,7 @@ Sistema web para crear, cerrar, enviar, reabrir y consolidar informes de auditor
 - **PDF:** WeasyPrint (HTML → PDF en el servidor), una hoja + anexo fotográfico
 - **Despliegue:** GitHub → Hostinger (adaptador Node.js sin dependencias, dependencias Python verificadas por hash)
 
-> **Estado:** 96 pruebas automatizadas aprobadas contra MySQL 8.4 y contra MariaDB 11.4; auditoría de dependencias sin vulnerabilidades conocidas. Se despliega en **Hostinger** desde este repositorio (ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)).
+> **Estado:** 99 pruebas automatizadas aprobadas contra MySQL 8.4 y contra MariaDB 11.4; auditoría de dependencias sin vulnerabilidades conocidas. Se despliega en **Hostinger** desde este repositorio (ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)).
 
 ## Documentación
 
@@ -90,13 +90,15 @@ ajsystem/                 Paquete de la aplicación
   reports/attachments.py  Fotos y firmas (validadas, sin EXIF, guardadas en la base)
   reports/extract.py      Autocompletado: texto de la foto (OCR) o fila de Excel → campos
   reports/importer.py     Importación Excel/CSV (un informe por equipo)
+  reports/sheet.py        Usa resources/Plantilla_Informe_AJ_System.html como hoja del informe (pantalla y PDF)
   security/               Contraseñas, sesiones, CSRF, autorización, datos del cliente
   web/                    Rutas: auth, home, reports, consolidation, logs, admin
   templates/, static/     HTML, CSS (app.css, sheet.css) y JS; logo, Ubuntu Sans y motor OCR en static/
   report_templates/       Campos: aj_v1.json (oficial) y provisional_v0.json (informes antiguos)
   document_templates/     PDF: aj_v1.html (+ assets/ logo y fuentes)
+resources/                Plantilla del informe entregada por el propietario (fuente única del formato)
 hostinger/, server.js     Arranque en Hostinger: integridad, Python verificado por hash, proxy a gunicorn
-migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura)
+migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura, 0004 eliminación)
 sql/grants_app.sql        Privilegios mínimos de la cuenta de la aplicación
 scripts/                  backup.py, restore.py, security_audit.sh, vendor-audit/, docker-mysql-tool.sh (desarrollo)
 .github/                  CI (auditoría + pruebas MySQL/MariaDB) y Dependabot

@@ -198,6 +198,18 @@
     });
   });
 
+  // ---------------------------------------------------------------- «Limpiar formulario» (no guarda)
+  var clearBtn = document.querySelector("[data-clear-form]");
+  if (clearBtn) clearBtn.addEventListener("click", function () {
+    if (!window.confirm("¿Borrar todos los datos escritos en la hoja? No se guarda nada hasta pulsar «Guardar cambios».")) return;
+    form.querySelectorAll(".val input[type=text], .val textarea").forEach(function (i) {
+      i.value = ""; i.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    form.querySelectorAll(".val input[type=radio]").forEach(function (r) { r.checked = false; });
+    form.querySelectorAll(".val.autofilled").forEach(function (c) { c.classList.remove("autofilled"); });
+    markDirty();
+  });
+
   // ---------------------------------------------------------------- firmas
   document.querySelectorAll(".sig[data-kind]").forEach(function (sig) {
     var pad = sig.querySelector(".pad"), cv = pad.querySelector("canvas"), img = pad.querySelector("img"),

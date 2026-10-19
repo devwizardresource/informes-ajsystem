@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .reports import schema
+from .reports import schema, sheet
 from .reports.service import STATUS_LABELS, _content_hash
 
 DOC_TEMPLATES_DIR = Path(__file__).resolve().parent / "document_templates"
@@ -64,6 +64,15 @@ def build_document_data(report: dict, events: list[dict], generated_by: dict, no
         "fotos": [{"src": _data_uri(a["mime"], a["content"]), "fecha": _fmt(a["created_at"], tz),
                    "autor": a["created_by_name"], "sha256": a["sha256"]} for a in files if a["kind"] == "FOTO"],
         "secciones_plantilla": template.sections,
+        # Hoja de la plantilla del propietario (resources/) rellenada, y su hoja de estilos.
+        "hoja": sheet.render(
+            template, report["data"], editable=False, static=True,
+            number=code.rsplit("-", 1)[-1][-5:], year=code.split("-")[1] if code.count("-") >= 2 else "",
+            registro={"usuario": owner.get("username") or "", "nombre": owner.get("full_name") or "",
+                      "identificacion": owner.get("id_number") or ""},
+            signatures={a["kind"]: _data_uri(a["mime"], a["content"]) for a in files if a["kind"] != "FOTO"},
+        ) if template.code == "aj_v1" else "",
+        "css_plantilla": sheet.css() if template.code == "aj_v1" else "",
         "plantilla": {"codigo": template.code, "nombre": template.name, "provisional": template.provisional},
         "meta": {
             "codigo": report["code"],

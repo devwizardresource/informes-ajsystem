@@ -63,7 +63,10 @@ def create_app(overrides: dict | None = None) -> Flask:
         SEND_FILE_MAX_AGE_DEFAULT=31536000,  # estáticos versionados (?v=) en caché un año
         TEMPLATES_AUTO_RELOAD=not settings.is_production,
     )
-    schema.load_template(app.config["AJS_REPORT_TEMPLATE"])  # falla al arrancar si la plantilla es inválida
+    active = schema.load_template(app.config["AJS_REPORT_TEMPLATE"])  # falla al arrancar si es inválida
+    if active.code == "aj_v1":
+        from .reports import sheet  # noqa: PLC0415
+        sheet.check_matches(active)  # resources/Plantilla_Informe_AJ_System.html debe tener todos los campos
 
     if settings.trust_proxy_hops > 0:
         from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: PLC0415

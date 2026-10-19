@@ -127,6 +127,7 @@ erDiagram
 
 Tablas adicionales: `report_counters` (secuencia anual de identificadores), `system_settings` y `schema_migrations`.
 Migración 0003: `report_attachments` (fotos y firmas por informe, LONGBLOB, solo inserción con retirada lógica; bloqueadas con el informe cerrado), `reopen_requests` (solicitudes de reapertura, como máximo una pendiente por informe), `users.id_number` (sustituye al correo; único y válido para iniciar sesión) y `reports.equipment_brand` (índice marca + serie).
+Migración 0004: `reports.deleted_at/deleted_by/deletion_reason` (eliminación lógica por el responsable; los informes eliminados se excluyen en `visibility_clause`).
 El número de serie del equipo **no** identifica al informe: un mismo equipo puede auditarse varias veces (comprobado por una prueba).
 
 ## 4. Rutas principales
@@ -145,6 +146,8 @@ El número de serie del equipo **no** identifica al informe: un mismo equipo pue
 | `/informes/<id>/adjuntos[/<id>[/retirar]]` | POST / GET | capacidad `edit` / visibilidad |
 | `/informes/<id>/autocompletar` | POST | capacidad `edit` (texto OCR → campos) |
 | `/informes/importar`, `/informes/importar/plantilla.xlsx` | POST / GET | `report.create`, `report.import` |
+| `/informes/<id>/eliminar`, `/informes/<id>/restaurar`, `/informes/eliminados` | POST / GET | `report.delete` |
+| `/informes/plantilla.css` | GET | — (CSS de `resources/Plantilla_Informe_AJ_System.html`) |
 | `/informes/<id>/pdf` | GET | `report.download` + visibilidad |
 | `/consolidacion` | GET | `module.consolidation`, `report.view_sent` |
 | `/registro`, `/registro/sesiones`, `/registro/verificar` | GET / POST | `module.audit_log`, `audit.read` / `audit.verify` |

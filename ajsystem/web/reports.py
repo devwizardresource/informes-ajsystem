@@ -7,7 +7,7 @@ from flask import (Blueprint, Response, current_app, flash, g, jsonify, redirect
                    url_for)
 
 from .. import audit, db, documents
-from ..reports import attachments, extract, importer, schema, service
+from ..reports import attachments, extract, importer, schema, service, sheet
 from ..security.authz import deny, has_perm, login_required, require_perm
 
 bp = Blueprint("reports", __name__, url_prefix="/informes")
@@ -106,17 +106,61 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
     pending = service.pending_request_for(report["id"])
     caps = service.capabilities(report, g.user, pending)
     files = attachments.list_for(report["id"])
+    signatures = {a["kind"]: url_for("reports.attachment_get", report_id=report["id"], public_id=a["public_id"])
+                  for a in files if a["kind"] in attachments.SIGNATURES}
+    # La hoja es la plantilla del propietario (resources/), rellenada con los datos del informe.
+    sheet_html = sheet.render(
+        template, form_values if form_values is not None else report["data"], editable=caps["edit"],
+        errors=errors, number=report["code"].rsplit("-", 1)[-1][-5:], year=report["code"].split("-")[1],
+        registro={"usuario": report["owner_username"], "nombre": report["owner_name"],
+                  "identificacion": report.get("owner_id_number")},
+        signatures=signatures, logo_src=url_for("static", filename="img/logo-aj-system@2x.png"))
     return render_template(
         "report_detail.html",
-        report=report, template=template, caps=caps, pending=pending,
+        report=report, template=template, caps=caps, pending=pending, sheet_html=sheet_html,
+        sheet_css_version=sheet.source().css_hash,
         photos=[a for a in files if a["kind"] == "FOTO"],
-        signatures={a["kind"]: a for a in files if a["kind"] in attachments.SIGNATURES},
-        values=form_values if form_values is not None else report["data"],
-        errors=errors or {},
         history=service.history(report["id"]),
         versions=service.versions(report["id"]),
-        number=report["code"].rsplit("-", 1)[-1][-5:], year=report["code"].split("-")[1],
     ), status
+
+
+@bp.route("/plantilla.css")
+def template_css():
+    """Hoja de estilos de la plantilla del propietario (se sirve aparte: la CSP no admite estilos en línea)."""
+    return Response(sheet.css(), mimetype="text/css",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@bp.route("/<int:report_id>/eliminar", methods=["POST"])
+@require_perm("report.delete")
+def delete(report_id: int):
+    try:
+        result = service.delete(report_id, g.user, request.form.get("motivo", ""), request.form.get("op_id"))
+    except service.ReportError as exc:
+        return _reject(exc, report_id, "eliminar")
+    flash(f"Informe {result['code']} eliminado. Puede restaurarlo desde «Informes eliminados».", "success")
+    return redirect(url_for("reports.deleted_index"))
+
+
+@bp.route("/eliminados")
+@require_perm("report.delete")
+def deleted_index():
+    return render_template("reports_deleted.html", rows=service.deleted())
+
+
+@bp.route("/<int:report_id>/restaurar", methods=["POST"])
+@require_perm("report.delete")
+def restore(report_id: int):
+    try:
+        result = service.restore(report_id, g.user)
+    except service.ReportError as exc:
+        if isinstance(exc, service.ReportNotFound):
+            deny("informe eliminado inexistente", object_type="informe", object_id=report_id, status=404)
+        flash(exc.message, "error")
+        return redirect(url_for("reports.deleted_index"))
+    flash(f"Informe {result['code']} restaurado.", "success")
+    return redirect(url_for("reports.detail", report_id=report_id))
 
 
 @bp.route("/<int:report_id>")

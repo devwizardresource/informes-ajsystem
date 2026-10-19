@@ -264,3 +264,51 @@ def test_pdf_incluye_anexo_fotografico(browser, make_user, q):
 
 def j_app(browser):
     return browser().client.application
+
+
+# ---------------------------------------------------------------- plantilla de resources/
+def test_la_hoja_es_la_plantilla_de_resources(browser, make_user):
+    from ajsystem.reports import sheet
+    b = browser(make_user("TECNICO"))
+    rid = create_report(b)
+    html_page = b.get(f"/informes/{rid}").get_data(as_text=True)
+    assert '<main class="sheet">' in html_page and "INFORME DE INVENTARIO Y CONCILIACIÓN" in html_page
+    assert "Imprimir / Guardar como PDF" in html_page and "Registro de quien realizó el informe" in html_page
+    css = b.get("/informes/plantilla.css")
+    assert css.status_code == 200 and css.get_data(as_text=True) == sheet.SOURCE.read_text(encoding="utf-8").split(
+        "<style>")[1].split("</style>")[0]
+
+
+def test_valores_escapados_en_la_hoja(browser, make_user, q):
+    b = browser(make_user("TECNICO"))
+    rid = create_report(b)
+    fill(b, q, rid, nombre='"><script>alert(1)</script>')
+    page = b.get(f"/informes/{rid}").get_data(as_text=True)
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
+
+
+# ---------------------------------------------------------------- eliminación por el admin
+def test_admin_elimina_y_restaura_informes(browser, make_user, q):
+    t, admin, j = make_user("TECNICO"), make_user("RESPONSABLE"), make_user("JEFE")
+    bt = browser(t)
+    rid = create_report(bt)
+    fill(bt, q, rid, nombre="Equipo a eliminar")
+    # Ni el técnico ni el jefe pueden eliminar
+    assert bt.post(f"/informes/{rid}/eliminar", {"motivo": "Informe duplicado por error", "op_id": new_op()}).status_code == 403
+    assert browser(j).post(f"/informes/{rid}/eliminar", {"motivo": "Informe duplicado por error",
+                                                         "op_id": new_op()}).status_code == 403
+    ba = browser(admin)
+    ba.post(f"/informes/{rid}/eliminar", {"motivo": "corto", "op_id": new_op()}, csrf_from=f"/informes/{rid}")
+    assert q("SELECT deleted_at FROM reports WHERE id = %s", (rid,))[0]["deleted_at"] is None  # motivo obligatorio
+    r = ba.post(f"/informes/{rid}/eliminar", {"motivo": "Informe duplicado por error", "op_id": new_op()},
+                csrf_from=f"/informes/{rid}")
+    assert r.status_code == 302
+    # Desaparece para todos, incluido su autor, y queda auditado
+    assert bt.get(f"/informes/{rid}").status_code == 404
+    assert browser(j).get(f"/informes/{rid}").status_code == 404
+    assert "Equipo a eliminar" not in bt.get("/informes").get_data(as_text=True)
+    assert "Equipo a eliminar" in ba.get("/informes/eliminados").get_data(as_text=True)
+    assert q("SELECT COUNT(*) AS n FROM audit_log WHERE event_type = 'INFORME_ELIMINADO'")[0]["n"] >= 1
+    # Se restaura
+    assert ba.post(f"/informes/{rid}/restaurar", {}, csrf_from="/informes/eliminados").status_code == 302
+    assert bt.get(f"/informes/{rid}").status_code == 200

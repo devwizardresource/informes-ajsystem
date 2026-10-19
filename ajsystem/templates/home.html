@@ -61,6 +61,7 @@
         {% if has_perm('module.consolidation') %}<a class="btn" href="{{ url_for('consolidation.index', orden='marca') }}">Equipos por marca y serie</a>{% endif %}
         {% if has_perm('module.audit_log') %}<a class="btn" href="{{ url_for('logs.sessions') }}">Entradas y salidas de sesión</a>{% endif %}
         {% if has_perm('users.manage') %}<a class="btn" href="{{ url_for('admin.users_index') }}">Usuarios y roles</a>{% endif %}
+        {% if has_perm('report.delete') %}<a class="btn" href="{{ url_for('reports.deleted_index') }}">Informes eliminados</a>{% endif %}
         <a class="btn" href="{{ url_for('auth.change_password') }}">Cambiar mi contraseña</a>
       </div>
     </section>
