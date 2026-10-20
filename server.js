@@ -8,13 +8,15 @@
  *   2. verifica la integridad de los recursos de terceros y prepara el entorno Python
  *      (hostinger/integrity.js y hostinger/python-env.js, dependencias verificadas por hash);
  *   3. aplica migraciones pendientes y crea el primer usuario si así se configura;
- *   4. arranca gunicorn en 127.0.0.1 (puerto interno) y le reenvía todo el tráfico.
+ *   4. arranca su propio gunicorn en una dirección interna (socket Unix por proceso) y le
+ *      reenvía todo el tráfico.
  *
  * No tiene dependencias npm: solo módulos nativos de Node.
  */
 const http = require("node:http");
 const net = require("node:net");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { ensurePythonEnv, ROOT, log } = require("./hostinger/python-env");
@@ -26,12 +28,24 @@ const EDGE_PROXY_HOPS = Math.max(0, Number(process.env.AJS_EDGE_PROXY_HOPS ?? 1)
 const WORKERS = String(process.env.AJS_WORKERS || 2);
 const THREADS = String(process.env.AJS_THREADS || 4);
 
+// Hostinger puede tener varios procesos Node de la misma aplicación a la vez (y lanzar uno
+// nuevo antes de que muera el anterior). Cada proceso tiene su propio gunicorn en su propia
+// dirección interna: un socket compartido se lo quitaban unos a otros.
+const SOCKET_DIR = path.join(ROOT, "tmp");
+const SOCKET_PREFIX = "gunicorn-";
+
 let backendPort = null;
-let backendSocketPath = process.env.AJS_INTERNAL_SOCKET || path.join(ROOT, "tmp", "gunicorn.sock");
+let backendSocketPath = null;
 let backendReady = false;
 let startupError = null;
 let shuttingDown = false;
 let child = null;
+let bindTargets = [];
+let bindIndex = 0;
+let backendGen = 0;
+let lastBackendHint = null;
+let failures = 0;
+const bootStartedAt = Date.now();
 
 // ---------------------------------------------------------------- utilidades
 
@@ -64,8 +78,23 @@ const STARTUP_HINTS = [
   [/No se encontró Python/, () => "El servidor no tiene Python 3.10 o superior disponible."],
   [/pip install falló/, () => "No se pudieron instalar las dependencias de Python verificadas por hash."],
   [/SHA-256|integridad/i, () => "Un archivo de terceros no coincide con su suma de verificación."],
+  [/ModuleNotFoundError: No module named '([\w.]+)'/, (m) => `Falta el módulo de Python '${m[1]}' en el entorno.`],
+  [/Can't connect to|Connection in use/, () => "gunicorn no pudo abrir su dirección interna; se prueba la siguiente alternativa."],
+  [/Worker failed to boot|App failed to load/, () => "La aplicación Python falla al cargar; el detalle está en las líneas «gunicorn:» del registro."],
   [/gunicorn no respondió/, () => "El servidor de la aplicación no respondió a tiempo tras iniciar."],
 ];
+
+// Valores de variables sensibles que nunca deben llegar al registro.
+const SECRET_VALUES = Object.entries(process.env)
+  .filter(([k, v]) => /PASS|SECRET|TOKEN|KEY/i.test(k) && v && v.length >= 4)
+  .map(([, v]) => v)
+  .sort((a, b) => b.length - a.length);
+
+function redact(text) {
+  let out = String(text).replace(/(\/\/[^\s:/@]+:)[^\s@]+@/g, "$1***@");
+  for (const v of SECRET_VALUES) out = out.split(v).join("***");
+  return out;
+}
 
 function startupHint(text) {
   for (const [re, fmt] of STARTUP_HINTS) {
@@ -101,30 +130,103 @@ function runFlask(py, args, { allowFail = false } = {}) {
   });
 }
 
-function waitForBackend(port, timeoutMs = 60000) {
+// Solo la espera del gunicorn vigente cuenta; las de arranques anteriores se abandonan.
+function waitForBackend(timeoutMs = 60000) {
+  const gen = backendGen;
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const attempt = () => {
+      if (gen !== backendGen) return;
       const sock = backendSocketPath
         ? net.connect(backendSocketPath)
-        : net.connect(port, "127.0.0.1");
-      sock.once("connect", () => { sock.destroy(); resolve(); });
+        : net.connect(backendPort, "127.0.0.1");
+      sock.once("connect", () => { sock.destroy(); if (gen === backendGen) resolve(); });
       sock.once("error", () => {
         sock.destroy();
-        if (Date.now() > deadline) reject(new Error("gunicorn no respondió a tiempo"));
-        else setTimeout(attempt, 500);
+        if (gen !== backendGen) return;
+        if (Date.now() > deadline) {
+          const err = new Error("gunicorn no respondió a tiempo");
+          err.hint = lastBackendHint;
+          reject(err);
+        } else setTimeout(attempt, 500);
       });
     };
     attempt();
   });
 }
 
+function markBackendReady() {
+  backendReady = true;
+  startupError = null;
+  log(`AJ System listo (backend en ${backendSocketPath || `127.0.0.1:${backendPort}`}).`);
+}
+
 // ---------------------------------------------------------------- backend Python
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (err) { return err.code === "EPERM"; }
+}
+
+// Borra los sockets de procesos Node que ya no existen (el nombre lleva su PID).
+function removeStaleSockets(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return; }
+  for (const name of names) {
+    const m = new RegExp(`^${SOCKET_PREFIX}(\\d+)\\.sock$`).exec(name);
+    if (m && !pidAlive(Number(m[1]))) {
+      try { fs.unlinkSync(path.join(dir, name)); } catch { /* otro proceso ya lo borró */ }
+    }
+  }
+}
+
+// Direcciones internas en orden de preferencia. El socket Unix bajo la aplicación es el que
+// funciona en Hostinger; si gunicorn no puede abrirlo se prueba /tmp y, por último, TCP local.
+function bindCandidates() {
+  if (process.env.AJS_INTERNAL_PORT) return [{ port: Number(process.env.AJS_INTERNAL_PORT) }];
+  if (process.env.AJS_INTERNAL_SOCKET) return [{ socket: process.env.AJS_INTERNAL_SOCKET }];
+  const name = `${SOCKET_PREFIX}${process.pid}.sock`;
+  const list = [];
+  for (const dir of [SOCKET_DIR, os.tmpdir()]) {
+    const p = path.join(dir, name);
+    if (p.length < 100) list.push({ socket: p, dir });
+  }
+  list.push({ port: 0 });
+  return list;
+}
+
+async function selectBindTarget() {
+  const t = bindTargets[bindIndex];
+  if (t.socket) {
+    if (t.dir) {
+      fs.mkdirSync(t.dir, { recursive: true });
+      removeStaleSockets(t.dir);
+    }
+    try { fs.unlinkSync(t.socket); } catch (err) { if (err.code !== "ENOENT") throw err; }
+    backendSocketPath = t.socket;
+    backendPort = null;
+  } else {
+    backendSocketPath = null;
+    backendPort = t.port || (await freePort());
+  }
+}
+
+// gunicorn arranca con PR_SET_PDEATHSIG: si este proceso Node muere (incluso con SIGKILL),
+// el kernel le envía SIGTERM y no quedan gunicorn huérfanos ocupando memoria.
+const GUNICORN_LAUNCHER = [
+  "import ctypes, signal, sys",
+  "try:\n    ctypes.CDLL(None).prctl(1, signal.SIGTERM)\nexcept Exception:\n    pass",
+  "from gunicorn.app.wsgiapp import run",
+  "sys.argv = ['gunicorn'] + sys.argv[1:]",
+  "sys.exit(run())",
+].join("\n");
 
 function startGunicorn(py) {
   const bind = backendSocketPath ? `unix:${backendSocketPath}` : `127.0.0.1:${backendPort}`;
+  const gen = ++backendGen;
+  const startedAt = Date.now();
+  let stderrTail = "";
   child = spawn(py, [
-    "-m", "gunicorn", "wsgi:app",
+    "-c", GUNICORN_LAUNCHER, "wsgi:app",
     "--bind", bind,
     "--workers", WORKERS,
     "--threads", THREADS,
@@ -132,16 +234,55 @@ function startGunicorn(py) {
     "--graceful-timeout", "20",
     "--access-logfile", "-",
     "--forwarded-allow-ips", "127.0.0.1",
-  ], { cwd: ROOT, env: pythonEnv(), stdio: "inherit" });
+    // El socket de control de gunicorn usa una ruta única por usuario ($HOME/.gunicorn):
+    // con varios procesos se pisarían. No se usa.
+    "--no-control-socket",
+  ], { cwd: ROOT, env: pythonEnv(), stdio: ["ignore", "inherit", "pipe"] });
+
+  // La salida de error de gunicorn pasa por log() (redactada) para que el registro de
+  // Hostinger la muestre; escrita directamente, Hostinger la descarta.
+  let pending = "";
+  child.stderr.on("data", (chunk) => {
+    const text = pending + chunk.toString();
+    const lines = text.split("\n");
+    pending = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const clean = redact(line).slice(0, 2000);
+      log(`gunicorn: ${clean}`);
+      stderrTail = (stderrTail + clean + "\n").slice(-20000);
+    }
+  });
 
   child.on("exit", (code, signal) => {
+    if (gen !== backendGen) return;
     backendReady = false;
+    if (pending.trim()) log(`gunicorn: ${redact(pending).slice(0, 2000)}`);
     if (shuttingDown) return;
-    log(`gunicorn terminó (código ${code}, señal ${signal}); se reinicia en 3 s.`);
-    setTimeout(() => {
-      startGunicorn(py);
-      waitForBackend(backendPort).then(() => { backendReady = true; }).catch((e) => log(e.message));
-    }, 3000);
+    if (backendSocketPath) { try { fs.unlinkSync(backendSocketPath); } catch { /* ya no existe */ } }
+    lastBackendHint = startupHint(stderrTail) || lastBackendHint;
+    // Si no pudo abrir la dirección interna, se pasa a la siguiente alternativa.
+    if (/Can't connect to|Connection in use/.test(stderrTail) && bindTargets.length > 1) {
+      bindIndex = (bindIndex + 1) % bindTargets.length;
+    }
+    // Espera creciente para no saturar el servidor si falla siempre.
+    const delay = Date.now() - startedAt > 60000 ? 3000 : Math.min(30000, 3000 * 2 ** Math.min(4, failures++));
+    log(`gunicorn terminó (código ${code}, señal ${signal}); se reinicia en ${Math.round(delay / 1000)} s.`);
+    if (Date.now() - bootStartedAt > 60000) {
+      const err = new Error("gunicorn no respondió a tiempo");
+      err.hint = lastBackendHint;
+      failStartup(err);
+    }
+    setTimeout(async () => {
+      if (shuttingDown) return;
+      try {
+        await selectBindTarget();
+        startGunicorn(py);
+        await waitForBackend();
+        failures = 0;
+        markBackendReady();
+      } catch (e) { failStartup(e); }
+    }, delay);
   });
 }
 
@@ -220,28 +361,24 @@ async function boot() {
     if (process.env.AJS_INITIAL_ADMIN_USER) {
       await runFlask(py, ["ensure-initial-user"], { allowFail: true });
     }
-    if (process.env.AJS_INTERNAL_PORT) {
-      backendSocketPath = null;
-      backendPort = Number(process.env.AJS_INTERNAL_PORT);
-    } else if (backendSocketPath) {
-      fs.mkdirSync(path.dirname(backendSocketPath), { recursive: true });
-      try { fs.unlinkSync(backendSocketPath); } catch (err) {
-        if (err.code !== "ENOENT") throw err;
-      }
-    } else {
-      backendPort = await freePort();
-    }
-    startGunicorn(py);
-    await waitForBackend(backendPort);
-    backendReady = true;
-    log(`AJ System listo (backend en ${backendSocketPath || `127.0.0.1:${backendPort}`}).`);
+    bindTargets = bindCandidates();
+    bindIndex = 0;
+    await selectBindTarget();
     setInterval(() => { checkForDeploy(py); }, RELOAD_CHECK_MS).unref();
+    startGunicorn(py);
+    await waitForBackend();
+    markBackendReady();
   } catch (err) {
-    startupError = err;
-    const hint = err.hint || startupHint(err.message);
-    if (hint) log(`Causa probable: ${hint}`);
-    log(`ERROR de arranque: ${err.message}`);
+    failStartup(err);
   }
+}
+
+function failStartup(err) {
+  if (backendReady || startupError) return;
+  startupError = err;
+  const hint = err.hint || startupHint(err.message);
+  if (hint) log(`Causa probable: ${hint}`);
+  log(`ERROR de arranque: ${err.message}`);
 }
 
 // ---------------------------------------------------------------- proxy HTTP
@@ -328,3 +465,7 @@ function shutdown() {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("exit", () => {
+  if (child && child.exitCode === null) child.kill("SIGTERM");
+  if (backendSocketPath) { try { fs.unlinkSync(backendSocketPath); } catch { /* ya no existe */ } }
+});
