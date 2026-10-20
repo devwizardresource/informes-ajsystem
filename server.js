@@ -52,13 +52,51 @@ function pythonEnv() {
   return { ...process.env, AJS_TRUST_PROXY_HOPS: process.env.AJS_TRUST_PROXY_HOPS || "1", PYTHONUNBUFFERED: "1" };
 }
 
+// Causa del fallo de arranque en lenguaje del operador. Solo nombra variables o pasos que
+// revisar; nunca muestra valores (contraseñas, usuarios, rutas) del entorno.
+const STARTUP_HINTS = [
+  [/ConfigError: Configuración inválida: (.*)/, (m) => `Configuración inválida en las variables de entorno: ${m[1].replace(/[^\w\sáéíóúñÁÉÍÓÚÑ(),.;:=\-]/g, "")}.`],
+  [/\(1045,/, () => "La base de datos rechazó el usuario o la contraseña. Revise AJS_DB_USER y AJS_DB_PASSWORD, y también AJS_DB_ADMIN_USER y AJS_DB_ADMIN_PASSWORD (use la misma cuenta de hPanel o déjelas vacías)."],
+  [/\(1044,|\(1049,/, () => "La base de datos indicada no existe o el usuario no tiene acceso a ella. Revise AJS_DB_NAME (nombre completo de hPanel, con el prefijo u123_)."],
+  [/\(2003,|\(2005,|\(2002,|\(2013,/, () => "No se pudo conectar con el servidor de base de datos. Revise AJS_DB_HOST (localhost en Hostinger) y AJS_DB_PORT (3306)."],
+  [/\((1142|1227|1370|1419),/, () => "La cuenta de base de datos no tiene permiso para actualizar la estructura (migraciones). Use la cuenta de hPanel con todos los privilegios sobre la base en AJS_DB_USER/AJS_DB_PASSWORD o en AJS_DB_ADMIN_USER/AJS_DB_ADMIN_PASSWORD."],
+  [/checksum distinto/, () => "Una migración ya aplicada en la base fue modificada en el repositorio. Restaure el archivo de migración original."],
+  [/No se encontró Python/, () => "El servidor no tiene Python 3.10 o superior disponible."],
+  [/pip install falló/, () => "No se pudieron instalar las dependencias de Python verificadas por hash."],
+  [/SHA-256|integridad/i, () => "Un archivo de terceros no coincide con su suma de verificación."],
+  [/gunicorn no respondió/, () => "El servidor de la aplicación no respondió a tiempo tras iniciar."],
+];
+
+function startupHint(text) {
+  for (const [re, fmt] of STARTUP_HINTS) {
+    const m = re.exec(text);
+    if (m) return fmt(m);
+  }
+  return null;
+}
+
+// Cuenta para migrar: la propietaria solo si tiene contraseña definida; si no (Hostinger con una
+// sola cuenta, o la clave de ejemplo sin valor), la cuenta de la aplicación.
+function migrationUser() {
+  const admin = (process.env.AJS_DB_ADMIN_USER || "").trim();
+  return admin && process.env.AJS_DB_ADMIN_PASSWORD ? admin : process.env.AJS_DB_USER;
+}
+
 function runFlask(py, args, { allowFail = false } = {}) {
   return new Promise((resolve, reject) => {
-    const p = spawn(py, ["-m", "flask", "--app", "wsgi", ...args], { cwd: ROOT, env: pythonEnv(), stdio: "inherit" });
+    const p = spawn(py, ["-m", "flask", "--app", "wsgi", ...args],
+      { cwd: ROOT, env: pythonEnv(), stdio: ["ignore", "inherit", "pipe"] });
+    let stderr = "";
+    p.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      stderr = (stderr + chunk.toString()).slice(-20000);
+    });
     p.on("error", reject);
     p.on("exit", (code) => {
-      if (code === 0 || allowFail) resolve(code);
-      else reject(new Error(`flask ${args[0]} terminó con código ${code}`));
+      if (code === 0 || allowFail) return resolve(code);
+      const err = new Error(`flask ${args[0]} terminó con código ${code}`);
+      err.hint = startupHint(stderr);
+      reject(err);
     });
   });
 }
@@ -151,7 +189,7 @@ async function checkForDeploy(py) {
     verifyVendorIntegrity();
     py = ensurePythonEnv();
     if (process.env.AJS_AUTO_MIGRATE !== "0") {
-      const migrator = process.env.AJS_DB_ADMIN_USER || process.env.AJS_DB_USER;
+      const migrator = migrationUser();
       await runFlask(py, ["db-migrate", "--user", migrator]);
     }
     runningCode = current;
@@ -175,7 +213,7 @@ async function boot() {
     runningCode = fingerprint(WATCHED);
     runningNode = fingerprint(NODE_FILES);
     if (process.env.AJS_AUTO_MIGRATE !== "0") {
-      const migrator = process.env.AJS_DB_ADMIN_USER || process.env.AJS_DB_USER;
+      const migrator = migrationUser();
       log(`Aplicando migraciones pendientes con la cuenta '${migrator}' ...`);
       await runFlask(py, ["db-migrate", "--user", migrator]);
     }
@@ -200,6 +238,8 @@ async function boot() {
     setInterval(() => { checkForDeploy(py); }, RELOAD_CHECK_MS).unref();
   } catch (err) {
     startupError = err;
+    const hint = err.hint || startupHint(err.message);
+    if (hint) log(`Causa probable: ${hint}`);
     log(`ERROR de arranque: ${err.message}`);
   }
 }
@@ -213,6 +253,10 @@ function clientIp(req) {
     .split(",").map((s) => s.trim()).filter(Boolean);
   chain.push(req.socket.remoteAddress || "");
   return chain[Math.max(0, chain.length - 1 - EDGE_PROXY_HOPS)];
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function statusPage(res, code, title, body) {
@@ -231,9 +275,12 @@ function statusPage(res, code, title, body) {
 const server = http.createServer((req, res) => {
   if (!backendReady) {
     if (startupError) {
-      // El detalle técnico queda en el registro del servidor (hPanel), no en la página.
+      // El detalle técnico queda en el registro del servidor (hPanel); la página solo indica qué revisar.
+      const hint = startupError.hint || startupHint(startupError.message);
       return statusPage(res, 503, "Servicio no disponible",
-        "La aplicación no pudo iniciarse. El responsable del sistema debe revisar el registro de la aplicación en Hostinger.");
+        "La aplicación no pudo iniciarse." +
+        (hint ? `</p><p><strong>Causa:</strong> ${escapeHtml(hint)}</p><p>Corrija el dato en hPanel y reinicie la aplicación.`
+              : " El responsable del sistema debe revisar el registro de la aplicación en Hostinger."));
     }
     // Hostinger termina procesos que responden 5xx durante el health check inicial.
     // La página es transitoria y no se cachea; los errores reales siguen devolviendo 503.
