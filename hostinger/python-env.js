@@ -18,6 +18,10 @@ const ROOT = path.resolve(__dirname, "..");
 const VENV_DIR = path.join(ROOT, ".venv-runtime");
 const MARKER = path.join(VENV_DIR, ".ajs-requirements.sha256");
 const LOCKFILE = path.join(ROOT, "requirements.lock");
+// Hostinger arranca varios procesos Node a la vez: solo uno crea el entorno; si dos lo
+// hicieran, uno borraría el entorno a medio instalar del otro.
+const BUILD_LOCK = path.join(ROOT, "tmp", "python-env.lock");
+const BUILD_LOCK_STALE_MS = 15 * 60 * 1000;
 const CANDIDATES = ["python3.13", "python3.12", "python3.11", "python3.10", "python3", "python"];
 const MIN_VERSION = [3, 10];
 
@@ -62,10 +66,46 @@ function isReady() {
   return run(venvPython(), ["-c", "import flask, pymysql, gunicorn, argon2, PIL, openpyxl"]).ok;
 }
 
-/** Devuelve la ruta del Python del entorno virtual, o lanza un Error con el diagnóstico. */
+function acquireBuildLock() {
+  try {
+    fs.mkdirSync(path.dirname(BUILD_LOCK), { recursive: true });
+    fs.mkdirSync(BUILD_LOCK);
+    return true;
+  } catch (err) {
+    // Sin directorio escribible para el bloqueo se continúa sin él (comportamiento anterior).
+    if (err.code !== "EEXIST") return true;
+  }
+  // Bloqueo de un proceso que murió a mitad de la instalación.
+  try {
+    if (Date.now() - fs.statSync(BUILD_LOCK).mtimeMs > BUILD_LOCK_STALE_MS) {
+      fs.rmSync(BUILD_LOCK, { recursive: true, force: true });
+      fs.mkdirSync(BUILD_LOCK);
+      return true;
+    }
+  } catch { /* otro proceso lo tomó antes */ }
+  return false;
+}
+
+/**
+ * Devuelve la ruta del Python del entorno virtual, o lanza un Error con el diagnóstico.
+ * Si otro proceso está creando el entorno, el Error lleva `retry = true`.
+ */
 function ensurePythonEnv() {
   if (isReady()) return venvPython();
+  if (!acquireBuildLock()) {
+    const err = new Error("Otro proceso está preparando el entorno Python; se reintenta en unos segundos.");
+    err.retry = true;
+    throw err;
+  }
+  try {
+    if (isReady()) return venvPython();
+    return buildPythonEnv();
+  } finally {
+    fs.rmSync(BUILD_LOCK, { recursive: true, force: true });
+  }
+}
 
+function buildPythonEnv() {
   const sys = findSystemPython();
   if (!sys) {
     throw new Error(

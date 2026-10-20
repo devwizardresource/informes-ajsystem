@@ -369,6 +369,11 @@ async function boot() {
     await waitForBackend();
     markBackendReady();
   } catch (err) {
+    if (err.retry && !shuttingDown) {
+      log(err.message);
+      setTimeout(boot, 10000);
+      return;
+    }
     failStartup(err);
   }
 }
