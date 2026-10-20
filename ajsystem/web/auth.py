@@ -1,6 +1,7 @@
 """Inicio y cierre de sesión, cambio de contraseña."""
 from __future__ import annotations
 
+import base64
 import datetime as dt
 from urllib.parse import urlsplit
 
@@ -120,3 +121,49 @@ def change_password():
         flash("Contraseña actualizada.", "success")
         return redirect(url_for("home.index"))
     return render_template("change_password.html", errors={})
+
+
+@bp.route("/cuenta/perfil")
+@login_required
+def profile():
+    signature = users.signature_for(g.user["id"])
+    signature_data = ("data:" + signature["mime"] + ";base64," +
+                      base64.b64encode(bytes(signature["content"])).decode("ascii")) if signature else None
+    return render_template("profile.html", signature_data=signature_data)
+
+
+@bp.route("/cuenta/perfil/firma", methods=["POST"])
+@login_required
+def profile_signature():
+    upload = request.files.get("firma")
+    try:
+        users.save_signature(g.user, upload.read() if upload else b"")
+    except users.UserError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("auth.profile"))
+    flash("Firma guardada en su perfil. Se usará en la firma de quien elabora.", "success")
+    return redirect(url_for("auth.profile"))
+
+
+@bp.route("/invitacion/<token>", methods=["GET", "POST"])
+def accept_invitation(token: str):
+    token = token[:128]
+    invited = users.invitation_user(token)
+    if not invited:
+        return render_template("error.html", code=410,
+                               message="La invitación no existe, venció o ya fue utilizada."), 410
+    errors = {}
+    if request.method == "POST":
+        new, confirm = request.form.get("new", ""), request.form.get("confirm", "")
+        if new != confirm:
+            errors["confirm"] = "La confirmación no coincide con la contraseña."
+        else:
+            try:
+                users.accept_invitation(token, new)
+            except users.UserError as exc:
+                flash(exc.message, "error")
+                errors.update(exc.field_errors)
+            else:
+                flash("Contraseña creada. Ya puede iniciar sesión.", "success")
+                return redirect(url_for("auth.login"))
+    return render_template("invitation.html", invited=invited, errors=errors)

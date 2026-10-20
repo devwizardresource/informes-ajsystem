@@ -47,6 +47,15 @@ def register_cli(app) -> None:
         applied = dbadmin.migrate(s, user=user, password=pw, log=click.echo)
         click.echo(f"Migraciones aplicadas: {applied or 'ninguna (al día)'}")
 
+    @app.cli.command("db-grants")
+    @click.option("--root-user", default="root", show_default=True)
+    @click.option("--account-host", default="%", show_default=True)
+    def db_grants(root_user, account_host):
+        """Actualiza los privilegios mínimos de la cuenta web tras cambiar el esquema."""
+        s = current_app.config["AJS_SETTINGS"]
+        root_pw = os.environ.get("AJS_DB_ROOT_PASSWORD") or getpass.getpass(f"Contraseña de {root_user}: ")
+        dbadmin.apply_grants(s, root_user, root_pw, account_host, log=click.echo)
+
     @app.cli.command("create-user")
     @click.option("--username", required=True)
     @click.option("--full-name", required=True)

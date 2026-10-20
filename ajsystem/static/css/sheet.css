@@ -22,7 +22,7 @@ body, button, input, textarea, select { font-family: "Ubuntu Sans", "Segoe UI", 
 .sheet .val input[type=text], .sheet .val input[type=date], .sheet .val textarea {
   width: 100%; border: 0; border-radius: 0; padding: 0; margin: 0; background: transparent; color: var(--ink);
   font: inherit; line-height: 1.25; min-height: 1.25em; display: block; outline: none; box-shadow: none; }
-.sheet .val textarea { resize: none; overflow: hidden; height: 1.3em; }
+.sheet .val textarea { resize: vertical; overflow-y: auto; height: 1.3em; max-height: 7em; }
 .sheet .val input::placeholder, .sheet .val textarea::placeholder { color: #a3acbd; font-style: italic; }
 .sheet .val input:focus, .sheet .val textarea:focus { background: #eefaff; box-shadow: inset 0 -2px 0 var(--cyan); }
 .sheet .val [contenteditable="false"]:empty::before { content: ""; }
@@ -32,8 +32,16 @@ body, button, input, textarea, select { font-family: "Ubuntu Sans", "Segoe UI", 
 .sheet .req { color: #b3261e; font-weight: 700; }
 .sheet .field-error { color: #b3261e; font-size: 7.6pt; font-weight: 600; margin: 1px 0 0; }
 .sheet .choices input:disabled { opacity: 1; }
+.sheet .choices { align-items: center; gap: 8px 14px; }
+.sheet .choices label { padding: 2px 4px; border-radius: 4px; }
+.sheet .choices label:has(input:checked) { color: #4c2483; background: #f3eaff; font-weight: 700; }
+.sheet .choice-current { flex-basis: 100%; color: #4c2483; font-size: 8pt; font-weight: 700; min-height: 1em; }
+.sheet .check-value { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 500; cursor: pointer; }
+.sheet .check-static { font-weight: 600; color: #4c2483; }
+.sheet tr[data-conditional-field][hidden] { display: none; }
 .sheet .sig .tools .status { font-size: 7.6pt; color: var(--muted); align-self: center; }
 .sheet .sig.readonly .pad { border: 0; background: none; cursor: default; }
+.sheet .sig-profile-hint { margin: 3px 0 0; text-align: center; font-size: 7.8pt; }
 
 /* Mensajes, estado del OCR y paneles bajo la hoja */
 .panel { width: 8.5in; max-width: calc(100% - 32px); margin: 16px auto; background: #fff; border-radius: 8px;

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Mi perfil{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Mi perfil</h1><a class="btn btn-ghost" href="{{ url_for('auth.change_password') }}">Cambiar contraseña</a></div>
+
+<section class="card profile-card">
+  <div>
+    <h2>Firma digital</h2>
+    <p class="muted">La firma de este perfil se muestra en «Firma digital de quien elabora» en los informes creados por usted.</p>
+    <form method="post" action="{{ url_for('auth.profile_signature') }}" enctype="multipart/form-data" class="profile-signature-form" data-busy>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="firma-perfil">Imagen de firma</label>
+      <input id="firma-perfil" name="firma" type="file" accept="image/jpeg,image/png,image/webp" required>
+      <p class="help">Use una imagen PNG transparente o una foto clara. Se elimina la información de ubicación y se guarda en la base de datos.</p>
+      <button type="submit" class="btn btn-primary">Guardar firma en mi perfil</button>
+    </form>
+  </div>
+  <div class="signature-preview">
+    <h3>Vista previa</h3>
+    {% if signature_data %}
+      <img src="{{ signature_data }}" alt="Firma digital guardada en el perfil" width="360" height="130">
+      <p class="help">Firma guardada en el perfil de {{ current_user.full_name }}.</p>
+    {% else %}
+      <p class="empty small">Aún no ha cargado una firma.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

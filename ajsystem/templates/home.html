@@ -18,6 +18,11 @@
       </div>
     </section>
 
+    {% if dashboard_unavailable %}
+    <div class="notice notice-info" role="status">
+      No se pudieron cargar todos los datos del panel. Los accesos rápidos siguen disponibles; pruebe recargar la página en unos minutos.
+    </div>
+    {% else %}
     {% if summary is defined %}
     <section>
       <h2>Resumen de informes</h2>
@@ -51,6 +56,7 @@
       {{ report_rows(sent_own, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
     </section>
     {% endif %}
+    {% endif %}
   </div>
 
   <aside class="aside" aria-label="Panel lateral">
@@ -66,7 +72,7 @@
       </div>
     </section>
 
-    {% if requests is defined %}
+    {% if requests is defined and not dashboard_unavailable %}
     <section class="card">
       <h3>Solicitudes de reapertura</h3>
       {% if requests %}
@@ -80,7 +86,7 @@
     </section>
     {% endif %}
 
-    {% if recent_logins is defined %}
+    {% if recent_logins is defined and not dashboard_unavailable %}
     <section class="card">
       <h3>Últimos accesos</h3>
       <ul class="mini-list">
@@ -98,7 +104,7 @@
         <li>Cree un informe por equipo o importe una matriz Excel.</li>
         <li>Tome una foto clara de las características del equipo: el informe se autocompleta.</li>
         <li>Revise, firme y pulse <b>Guardar cambios</b>; puede seguir editando.</li>
-        <li><b>Cerrar informe</b> lo bloquea. Para editarlo de nuevo, solicite la reapertura.</li>
+        <li><b>Cerrar informe</b> lo bloquea. Cualquier usuario puede reabrirlo indicando el motivo.</li>
       </ol>
     </section>
   </aside>

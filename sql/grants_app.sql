@@ -27,3 +27,7 @@ GRANT SELECT, INSERT ON `{db}`.audit_log       TO '{app_user}'@'{app_host}';
 GRANT SELECT, INSERT ON `{db}`.report_attachments TO '{app_user}'@'{app_host}';
 GRANT UPDATE (ocr_text, deleted_at, deleted_by) ON `{db}`.report_attachments TO '{app_user}'@'{app_host}';
 GRANT SELECT, INSERT, UPDATE ON `{db}`.reopen_requests TO '{app_user}'@'{app_host}';
+
+-- Migración 0005: firma de perfil e invitaciones de primer acceso.
+GRANT SELECT, INSERT, UPDATE ON `{db}`.user_signatures  TO '{app_user}'@'{app_host}';
+GRANT SELECT, INSERT, UPDATE ON `{db}`.user_invitations TO '{app_user}'@'{app_host}';

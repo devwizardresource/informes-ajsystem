@@ -1,7 +1,9 @@
 """Operaciones administrativas (solo responsable administrativo: permiso users.manage)."""
 from __future__ import annotations
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from urllib.parse import quote, urlsplit
+
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import users
 from ..security.passwords import POLICY_TEXT
@@ -23,11 +25,12 @@ def users_create():
     form = request.form
     try:
         users.create_user(form.get("username"), form.get("full_name"), form.get("id_number"), form.get("password"),
-                          form.get("role_id"))
+                          form.get("role_id"), form.get("phone_number"))
     except users.UserError as exc:
         flash(exc.message, "error")
         return render_template("admin_users.html", users=users.list_users(), roles=users.roles(), policy=POLICY_TEXT,
-                               errors=exc.field_errors, form={k: form.get(k, "") for k in ("username", "full_name", "id_number", "role_id")}), 422
+                               errors=exc.field_errors, form={k: form.get(k, "") for k in
+                                                              ("username", "full_name", "id_number", "phone_number", "role_id")}), 422
     flash("Usuario creado. Deberá cambiar la contraseña en su primer acceso.", "success")
     return redirect(url_for("admin.users_index"))
 
@@ -58,6 +61,35 @@ def users_status(user_id: int):
 def users_id_number(user_id: int):
     return _run(users.set_id_number, user_id, request.form.get("id_number", ""), g.user,
                 ok="Número de identificación actualizado.")
+
+
+@bp.route("/usuarios/<int:user_id>/telefono", methods=["POST"])
+@require_perm("users.manage")
+def users_phone_number(user_id: int):
+    return _run(users.set_phone_number, user_id, request.form.get("phone_number", ""), g.user,
+                ok="Número de WhatsApp actualizado.")
+
+
+@bp.route("/usuarios/<int:user_id>/invitacion-whatsapp", methods=["POST"])
+@require_perm("users.manage")
+def users_invitation_whatsapp(user_id: int):
+    base = current_app.config.get("AJS_PUBLIC_BASE_URL") or request.url_root
+    base_parts = urlsplit(base)
+    settings = current_app.config["AJS_SETTINGS"]
+    if (not base_parts.netloc or base_parts.scheme not in ({"https"} if settings.is_production else {"http", "https"})
+            or base_parts.path not in ("", "/") or base_parts.query or base_parts.fragment):
+        flash("Configure AJS_PUBLIC_BASE_URL con el dominio público del sistema antes de invitar usuarios.", "error")
+        return redirect(url_for("admin.users_index"))
+    try:
+        token, phone, name, username = users.issue_invitation(user_id, g.user)
+    except users.UserError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("admin.users_index"))
+    base = base.rstrip("/")
+    invite_url = base + url_for("auth.accept_invitation", token=token)
+    message = (f"Hola {name}. Para activar tu primer acceso a AJ System y crear tu contraseña, "
+               f"abre este enlace (válido por 72 horas): {invite_url} Usuario: {username}.")
+    return redirect("https://wa.me/" + phone + "?text=" + quote(message), code=303)
 
 
 @bp.route("/usuarios/<int:user_id>/contrasena", methods=["POST"])

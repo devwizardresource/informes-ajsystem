@@ -94,7 +94,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 # Servidor WSGI escuchando en 127.0.0.1 detrás de nginx con TLS; con un proxy, AJS_TRUST_PROXY_HOPS=1
 ```
 
-Actualizaciones: respaldo → `git pull` → `pip install -r requirements.txt` → `flask db-migrate` → reinicio → `verify-audit`.
+Actualizaciones: respaldo → `git pull` → `pip install -r requirements.txt` → `flask db-migrate` → `flask db-grants` (cuando la cuenta web use privilegios mínimos) → reinicio → `verify-audit`.
+
+Configure `AJS_PUBLIC_BASE_URL` con la URL HTTPS pública del dominio para que las invitaciones de WhatsApp apunten al sitio correcto.
 Las migraciones irreversibles o destructivas **no** se ejecutan sin respaldo verificado y autorización.
 
 ## Cuentas MySQL

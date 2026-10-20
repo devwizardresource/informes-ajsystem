@@ -50,8 +50,8 @@ stateDiagram-v2
   EN_ELABORACION --> EN_ELABORACION: Guardar cambios (nueva revisión)
   EN_ELABORACION --> CERRADO: Cerrar informe y registrar
   CERRADO --> ENVIADO: Enviar informe
-  CERRADO --> REABIERTO: Reabrir (jefe o responsable, con motivo)
-  ENVIADO --> REABIERTO: Reabrir (jefe o responsable, con motivo)
+  CERRADO --> REABIERTO: Reabrir (cualquier usuario, con motivo)
+  ENVIADO --> REABIERTO: Reabrir (cualquier usuario, con motivo)
   REABIERTO --> REABIERTO: Guardar cambios
   REABIERTO --> CERRADO: Cerrar informe y registrar
 ```
@@ -128,6 +128,7 @@ erDiagram
 Tablas adicionales: `report_counters` (secuencia anual de identificadores), `system_settings` y `schema_migrations`.
 Migración 0003: `report_attachments` (fotos y firmas por informe, LONGBLOB, solo inserción con retirada lógica; bloqueadas con el informe cerrado), `reopen_requests` (solicitudes de reapertura, como máximo una pendiente por informe), `users.id_number` (sustituye al correo; único y válido para iniciar sesión) y `reports.equipment_brand` (índice marca + serie).
 Migración 0004: `reports.deleted_at/deleted_by/deletion_reason` (eliminación lógica por el responsable; los informes eliminados se excluyen en `visibility_clause`).
+Migración 0005: teléfonos para WhatsApp, firmas persistentes del perfil, enlaces de invitación de un solo uso (72 horas) y permisos de consulta/edición/reapertura para todos los perfiles.
 El número de serie del equipo **no** identifica al informe: un mismo equipo puede auditarse varias veces (comprobado por una prueba).
 
 ## 4. Rutas principales
@@ -135,6 +136,8 @@ El número de serie del equipo **no** identifica al informe: un mismo equipo pue
 | Ruta | Método | Permiso |
 |---|---|---|
 | `/login`, `/logout`, `/cuenta/contrasena` | GET/POST | — / sesión |
+| `/cuenta/perfil`, `/cuenta/perfil/firma` | GET / POST | sesión propia |
+| `/invitacion/<token>` | GET / POST | token de primer acceso válido |
 | `/` (Inicio) | GET | `module.home` |
 | `/informes`, `/informes/nuevo` | GET / POST | `module.reports`, `report.create` |
 | `/informes/<id>` | GET | módulo de informes + visibilidad del recurso |

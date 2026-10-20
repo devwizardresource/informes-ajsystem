@@ -1,17 +1,18 @@
 """Módulo 2 · Creación de informe (y acciones del ciclo de vida sobre un informe concreto)."""
 from __future__ import annotations
 
+import base64
 import re
 
 from flask import (Blueprint, Response, current_app, flash, g, jsonify, redirect, render_template, request,
                    url_for)
 
-from .. import audit, db, documents
+from .. import audit, db, documents, users
 from ..reports import attachments, extract, importer, schema, service, sheet
 from ..security.authz import deny, has_perm, login_required, require_perm
 
 bp = Blueprint("reports", __name__, url_prefix="/informes")
-UPLOAD_ENDPOINTS = {"reports.attachment_add", "reports.import_matrix"}
+UPLOAD_ENDPOINTS = {"reports.attachment_add", "reports.import_matrix", "auth.profile_signature"}
 _PUBLIC_ID = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -109,13 +110,21 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
     files = attachments.list_for(report["id"])
     signatures = {a["kind"]: url_for("reports.attachment_get", report_id=report["id"], public_id=a["public_id"])
                   for a in files if a["kind"] in attachments.SIGNATURES}
+    if "FIRMA_ELABORA" not in signatures:
+        profile_signature = users.signature_for(report["owner_id"])
+        if profile_signature:
+            signatures["FIRMA_ELABORA"] = (
+                f"data:{profile_signature['mime']};base64," +
+                base64.b64encode(bytes(profile_signature["content"])).decode("ascii"))
     # La hoja es la plantilla del propietario (resources/), rellenada con los datos del informe.
     sheet_html = sheet.render(
         template, values, editable=caps["edit"],
         errors=errors, number=report["code"].rsplit("-", 1)[-1][-5:], year=report["code"].split("-")[1],
         registro={"usuario": report["owner_username"], "nombre": report["owner_name"],
                   "identificacion": report.get("owner_id_number")},
-        signatures=signatures, logo_src=url_for("static", filename="img/logo-aj-system@2x.png"))
+        signatures=signatures, can_receive_signature=g.user["role_code"] in {"JEFE", "RESPONSABLE"},
+        profile_url=url_for("auth.profile") if report["owner_id"] == g.user["id"] else None,
+        logo_src=url_for("static", filename="img/logo-aj-system@2x.png"))
     return render_template(
         "report_detail.html",
         report=report, template=template, caps=caps, pending=pending, sheet_html=sheet_html,

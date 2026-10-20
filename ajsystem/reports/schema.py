@@ -88,6 +88,8 @@ def data_for_template(code: str, data: dict | None) -> dict:
     source = dict(data or {})
     original = load_template(code)
     if not original.provisional:
+        if source.get("observaciones") and "observaciones_habilitadas" not in source:
+            source["observaciones_habilitadas"] = True
         return source
     target = empty_data(effective_template(code))
     # Names used by provisional_v0. Official ``nombre`` and ``numero_serie`` are the
@@ -101,6 +103,8 @@ def data_for_template(code: str, data: dict | None) -> dict:
     for field_id in target:
         if field_id in source:
             target[field_id] = source[field_id]
+    if target.get("observaciones") and "observaciones_habilitadas" not in source:
+        target["observaciones_habilitadas"] = True
     return target
 
 
@@ -175,6 +179,8 @@ def parse_form(template: Template, form) -> tuple[dict, dict[str, str]]:
         elif f.type == "select" and value not in f.options:
             errors[f.id] = "Opción no válida."
         data[f.id] = value
+    if "observaciones_habilitadas" in data and not data["observaciones_habilitadas"]:
+        data["observaciones"] = None
     return data, errors
 
 

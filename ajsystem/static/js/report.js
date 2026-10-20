@@ -86,6 +86,23 @@
     d.hidden = !text;
   }
 
+  function refreshChoices() {
+    form.querySelectorAll("[data-choice-group]").forEach(function (group) {
+      var selected = group.querySelector("input[type=radio]:checked"), output = group.querySelector(".choice-current");
+      if (output) output.textContent = selected ? "Seleccionado: " + selected.value : "Sin seleccionar";
+    });
+  }
+
+  function refreshConditionalFields() {
+    var toggle = form.querySelector('[name="observaciones_habilitadas"]');
+    var row = form.querySelector('[data-conditional-field="observaciones"]');
+    if (toggle && row) row.hidden = !toggle.checked;
+  }
+
+  form.addEventListener("change", function () { refreshChoices(); refreshConditionalFields(); });
+  refreshChoices();
+  refreshConditionalFields();
+
   // ---------------------------------------------------------------- OCR (carga diferida)
   var workerPromise = null;
   function loadScript(src) {
@@ -127,6 +144,8 @@
     var radios = cell.querySelectorAll("input[type=radio]");
     if (radios.length) {
       Array.prototype.forEach.call(radios, function (r) { r.checked = (r.value === value); });
+      var selected = Array.prototype.find.call(radios, function (r) { return r.checked; });
+      if (selected) selected.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
       var input = cell.querySelector("input, textarea, select");
       input.value = value;
@@ -186,7 +205,16 @@
       return Promise.resolve().then(function () {
         // Escala de grises y contraste: mejora la lectura de pantallas y etiquetas.
         var ocrCanvas = drawScaled(loaded.img, MAX_SIDE, "grayscale(1) contrast(1.35)");
-        return getWorker().then(function (worker) { return worker.recognize(ocrCanvas); });
+        return getWorker().then(function (worker) {
+          return worker.recognize(ocrCanvas, { rotateAuto: true }).then(function (res) {
+            var text = (res.data && res.data.text) || "";
+            if (text.trim().length >= 6) return res;
+            // A second, high-contrast pass helps with small labels and low-light photos.
+            status("Mejorando la lectura…", "Probando contraste alto para recuperar texto pequeño.", 65);
+            var binary = drawScaled(loaded.img, MAX_SIDE, "grayscale(1) contrast(2.1)");
+            return worker.recognize(binary, { rotateAuto: true });
+          });
+        });
       }).then(function (res) {
         var text = (res.data && res.data.text) || "";
         showText(text);
@@ -233,6 +261,8 @@
       i.value = ""; i.dispatchEvent(new Event("input", { bubbles: true }));
     });
     form.querySelectorAll(".val input[type=radio]").forEach(function (r) { r.checked = false; });
+    form.querySelectorAll('.val input[type="checkbox"]').forEach(function (c) { c.checked = false; });
+    refreshChoices(); refreshConditionalFields();
     form.querySelectorAll(".val.autofilled").forEach(function (c) { c.classList.remove("autofilled"); });
     markDirty();
   });

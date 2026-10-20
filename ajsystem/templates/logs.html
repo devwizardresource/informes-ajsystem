@@ -46,7 +46,9 @@
       <td data-label="S. O.">{{ r.os_reported or '—' }}</td>
       <td data-label="Sesión"><code>{{ (r.session_public_id or '')[:8] }}</code></td>
       <td data-label="Objeto">{% if r.object_type %}{{ r.object_type }}: {{ r.object_id }}{% endif %}</td>
-      <td data-label="Detalle" class="detail">{% for k, v in r.detail.items() %}<div><strong>{{ k }}:</strong> {{ v }}</div>{% endfor %}</td>
+      <td data-label="Detalle" class="detail"><details class="event-detail"><summary>Ver detalle ({{ r.detail|length }})</summary>
+        <div class="detail-content">{% for k, v in r.detail.items() %}<div><strong>{{ k }}:</strong> {{ v }}</div>{% endfor %}</div>
+      </details></td>
     </tr>
   {% else %}
     <tr><td colspan="11" class="muted">Sin eventos.</td></tr>

@@ -9,7 +9,7 @@ Sistema web para crear, cerrar, enviar, reabrir y consolidar informes de auditor
 - **PDF:** WeasyPrint (HTML → PDF en el servidor), una hoja + anexo fotográfico
 - **Despliegue:** GitHub → Hostinger (adaptador Node.js sin dependencias, dependencias Python verificadas por hash)
 
-> **Estado:** 99 pruebas automatizadas aprobadas contra MySQL 8.4 y contra MariaDB 11.4; auditoría de dependencias sin vulnerabilidades conocidas. Se despliega en **Hostinger** desde este repositorio (ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)).
+> La suite automatizada de MySQL/MariaDB cubre autenticación, permisos, informes, adjuntos y persistencia. Ejecute la verificación indicada abajo después de aplicar migraciones. Se despliega en **Hostinger** desde este repositorio (ver [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)).
 
 ## Documentación
 
@@ -65,6 +65,7 @@ En VS Code: abra la carpeta, seleccione el intérprete `.venv` y use las configu
 |---|---|
 | `flask --app wsgi db-bootstrap` | Crea base y cuentas, migra y aplica GRANT (cuenta DBA) |
 | `flask --app wsgi db-migrate` | Aplica migraciones pendientes (haga un respaldo antes) |
+| `flask --app wsgi db-grants` | Actualiza los privilegios mínimos después de agregar tablas |
 | `flask --app wsgi create-user --username U --full-name N --role ROL [--id-number CC]` | Alta de usuario por consola (auditada) |
 | `flask --app wsgi set-role-name RESPONSABLE "Nombre visible"` | Cambia el nombre visible de un perfil |
 | `flask --app wsgi verify-audit` | Verifica la cadena de auditoría (sale con 1 si hay alteraciones) |
@@ -98,7 +99,7 @@ ajsystem/                 Paquete de la aplicación
   document_templates/     PDF: aj_v1.html (+ assets/ logo y fuentes)
 resources/                Plantilla del informe entregada por el propietario (fuente única del formato)
 hostinger/, server.js     Arranque en Hostinger: integridad, Python verificado por hash, proxy a gunicorn
-migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura, 0004 eliminación)
+migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura, 0004 eliminación, 0005 perfiles/invitaciones/permisos)
 sql/grants_app.sql        Privilegios mínimos de la cuenta de la aplicación
 scripts/                  backup.py, restore.py, security_audit.sh, vendor-audit/, docker-mysql-tool.sh (desarrollo)
 .github/                  CI (auditoría + pruebas MySQL/MariaDB) y Dependabot
@@ -112,6 +113,6 @@ docs/                     Documentación
 1. Toda consulta SQL usa parámetros (`%s`). Nunca concatene valores del usuario.
 2. Toda operación que modifique datos: dentro de `db.transaction()`, con su `audit.write(cur, ...)` en la misma transacción.
 3. Toda ruta nueva: `@require_perm(...)` y, si actúa sobre un informe, la comprobación por recurso de `reports/service.py`.
-4. Los cambios de esquema van en una migración nueva (`migrations/0004_...sql`); las aplicadas no se editan, porque el ejecutor verifica su suma.
+4. Los cambios de esquema van en una migración nueva (`migrations/0006_...sql`); las aplicadas no se editan, porque el ejecutor verifica su suma.
 5. Nada de scripts ni estilos en línea: la CSP los bloquea.
 # informes-ajsystem

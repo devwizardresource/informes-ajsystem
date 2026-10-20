@@ -9,7 +9,7 @@ def denied_count(q, username):
              (username,))[0]["n"]
 
 
-@pytest.mark.parametrize("path", ["/consolidacion", "/registro", "/administracion/usuarios"])
+@pytest.mark.parametrize("path", ["/registro", "/administracion/usuarios"])
 def test_tecnico_no_accede_a_modulos_restringidos(browser, make_user, q, path):
     u = make_user("TECNICO")
     b = browser(u)
@@ -22,7 +22,7 @@ def test_tecnico_no_accede_a_modulos_restringidos(browser, make_user, q, path):
 def test_tecnico_no_ve_enlaces_restringidos(browser, make_user):
     html = browser(make_user("TECNICO")).get("/").get_data(as_text=True)
     assert "Creación de informe" in html
-    assert "Consolidación de informes" not in html and "Registro detallado" not in html
+    assert "Consolidación de informes" in html and "Registro detallado" not in html
 
 
 def test_tecnico_no_puede_descargar(browser, make_user, q):
@@ -36,25 +36,25 @@ def test_tecnico_no_puede_descargar(browser, make_user, q):
              (u["username"],))[0]["n"] == 0
 
 
-def test_tecnico_no_puede_reabrir(browser, make_user, q):
+def test_tecnico_puede_reabrir_con_motivo_sin_aprobacion(browser, make_user, q):
     u = make_user("TECNICO")
     b = browser(u)
     rid = create_report(b)
     assert fill(b, q, rid, accion="cerrar").status_code == 302
     r = b.post(f"/informes/{rid}/reabrir", {"motivo": "Quiero cambiar algo importante", "op_id": new_op()})
-    assert r.status_code == 403
-    assert q("SELECT status_code FROM reports WHERE id = %s", (rid,))[0]["status_code"] == "CERRADO"
+    assert r.status_code == 302
+    assert q("SELECT status_code FROM reports WHERE id = %s", (rid,))[0]["status_code"] == "REABIERTO"
 
 
-def test_tecnico_no_ve_informes_ajenos(browser, make_user):
+def test_tecnico_puede_ver_y_editar_informes_ajenos(browser, make_user, q):
     a, b_user = make_user("TECNICO"), make_user("TECNICO")
     ba = browser(a)
     rid = create_report(ba)
     bb = browser(b_user)
-    assert bb.get(f"/informes/{rid}").status_code == 404
-    r = bb.post(f"/informes/{rid}/guardar", {"nombre": "intrusión", "revision": 1, "accion": "guardar"})
-    assert r.status_code == 404
-    assert bb.post(f"/informes/{rid}/enviar", {"op_id": new_op()}).status_code == 404
+    assert bb.get(f"/informes/{rid}").status_code == 200
+    r = fill(bb, q, rid, nombre="Editado por otro técnico")
+    assert r.status_code == 302
+    assert q("SELECT title FROM reports WHERE id = %s", (rid,))[0]["title"] == "Editado por otro técnico"
 
 
 @pytest.mark.parametrize("role", ["JEFE", "RESPONSABLE"])

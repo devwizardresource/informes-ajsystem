@@ -18,7 +18,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
@@ -54,6 +54,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.config.update(
         AJS_SETTINGS=settings,
         AJS_REPORT_TEMPLATE=os.environ.get("AJS_REPORT_TEMPLATE", "aj_v1"),
+        AJS_PUBLIC_BASE_URL=os.environ.get("AJS_PUBLIC_BASE_URL", "").strip().rstrip("/"),
         SECRET_KEY=settings.secret_key,
         # La cookie de Flask solo transporta mensajes flash (sin datos sensibles).
         SESSION_COOKIE_NAME="ajs_flash",

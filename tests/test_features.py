@@ -1,5 +1,7 @@
 """Plantilla oficial, fotos/OCR, importación Excel, solicitudes de reapertura, identificación y sesiones."""
 import io
+import re
+from urllib.parse import parse_qs, urlsplit
 
 import pymysql
 import pytest
@@ -78,7 +80,7 @@ def test_sin_correo_en_usuarios(q):
 
 # ---------------------------------------------------------------- reglas de edición del técnico
 def test_tecnico_edita_tras_guardar_y_pierde_edicion_al_cerrar(browser, make_user, q):
-    t, j = make_user("TECNICO"), make_user("JEFE")
+    t = make_user("TECNICO")
     bt = browser(t)
     rid = create_report(bt)
     assert fill(bt, q, rid, nombre="Primera").status_code == 302
@@ -88,44 +90,75 @@ def test_tecnico_edita_tras_guardar_y_pierde_edicion_al_cerrar(browser, make_use
     fill(bt, q, rid, nombre="Intento tras cierre")
     assert revision_of(q, rid) == rev
     assert upload(bt, rid, _jpeg()).status_code == 403  # tampoco admite fotos
-    # El técnico no puede reabrir: solicita permiso
-    assert bt.post(f"/informes/{rid}/reabrir", {"motivo": "x" * 20, "op_id": new_op()}).status_code == 403
-    r = bt.post(f"/informes/{rid}/solicitar-reapertura", {"motivo": "Corregir el número de serie", "op_id": new_op()},
-                csrf_from=f"/informes/{rid}")
-    assert r.status_code == 302
-    assert q("SELECT status FROM reopen_requests WHERE report_id = %s", (rid,))[0]["status"] == "PENDIENTE"
-    # Una segunda solicitud pendiente se rechaza
-    bt.post(f"/informes/{rid}/solicitar-reapertura", {"motivo": "Otra solicitud duplicada", "op_id": new_op()},
-            csrf_from=f"/informes/{rid}")
-    assert q("SELECT COUNT(*) AS n FROM reopen_requests WHERE report_id = %s", (rid,))[0]["n"] == 1
-    # El jefe la ve en Inicio y la aprueba
-    bj = browser(j)
-    assert "Corregir el número de serie" in bj.get("/").get_data(as_text=True)
-    r = bj.post(f"/informes/{rid}/resolver-solicitud", {"decision": "aprobar", "op_id": new_op()},
+    # Cualquier perfil puede reabrir con motivo sin pedir aprobación de un tercero.
+    r = bt.post(f"/informes/{rid}/reabrir", {"motivo": "Corregir el número de serie", "op_id": new_op()},
                 csrf_from=f"/informes/{rid}")
     assert r.status_code == 302
     assert q("SELECT status_code FROM reports WHERE id = %s", (rid,))[0]["status_code"] == "REABIERTO"
-    assert q("SELECT status FROM reopen_requests WHERE report_id = %s", (rid,))[0]["status"] == "APROBADA"
     assert fill(bt, q, rid, nombre="Corregido").status_code == 302
     assert q("SELECT title FROM reports WHERE id = %s", (rid,))[0]["title"] == "Corregido"
 
 
-def test_rechazo_de_solicitud_mantiene_cerrado(browser, make_user, q):
-    t, a = make_user("TECNICO"), make_user("RESPONSABLE")
-    bt = browser(t)
-    rid = create_report(bt)
-    fill(bt, q, rid, accion="cerrar")
-    bt.post(f"/informes/{rid}/solicitar-reapertura", {"motivo": "Necesito cambiar la marca", "op_id": new_op()},
-            csrf_from=f"/informes/{rid}")
-    ba = browser(a)
-    ba.post(f"/informes/{rid}/resolver-solicitud", {"decision": "rechazar", "nota": "corto", "op_id": new_op()},
-            csrf_from=f"/informes/{rid}")
-    assert q("SELECT status FROM reopen_requests WHERE report_id = %s", (rid,))[0]["status"] == "PENDIENTE"
-    ba.post(f"/informes/{rid}/resolver-solicitud", {"decision": "rechazar", "nota": "La marca es correcta.",
-                                                    "op_id": new_op()}, csrf_from=f"/informes/{rid}")
-    assert q("SELECT status FROM reopen_requests WHERE report_id = %s", (rid,))[0]["status"] == "RECHAZADA"
-    assert q("SELECT status_code FROM reports WHERE id = %s", (rid,))[0]["status_code"] == "CERRADO"
-    assert q("SELECT COUNT(*) AS n FROM audit_log WHERE event_type = 'REAPERTURA_RECHAZADA'")[0]["n"] >= 1
+def test_observaciones_solo_se_muestran_al_seleccionarlas():
+    from ajsystem.reports import schema, sheet
+
+    template = schema.load_template("aj_v1")
+    values = schema.empty_data(template)
+    values["observaciones"] = "Nota opcional"
+    values["observaciones_habilitadas"] = False
+    hidden = sheet.render(template, values, editable=True)
+    assert 'data-conditional-field="observaciones" hidden' in hidden
+    values["observaciones_habilitadas"] = True
+    shown = sheet.render(template, values, editable=True)
+    assert 'data-conditional-field="observaciones" hidden' not in shown
+    assert "Nota opcional" in shown
+    assert "Medidas de protección contra robos" not in shown
+
+
+def test_firma_de_perfil_se_copia_al_informe_al_cerrar(browser, make_user, q):
+    t = make_user("TECNICO")
+    b = browser(t)
+    response = b.client.post("/cuenta/perfil/firma", data={
+        "csrf_token": b.csrf("/cuenta/perfil"), "firma": (io.BytesIO(_jpeg()), "firma.jpg")},
+        content_type="multipart/form-data")
+    assert response.status_code == 302
+    signature = q("SELECT sha256 FROM user_signatures WHERE user_id = %s", (t["id"],))[0]
+    rid = create_report(b)
+    assert fill(b, q, rid, accion="cerrar").status_code == 302
+    copied = q("SELECT sha256, created_by FROM report_attachments "
+               "WHERE report_id = %s AND kind = 'FIRMA_ELABORA' AND deleted_at IS NULL", (rid,))[0]
+    assert copied["sha256"] == signature["sha256"] and copied["created_by"] == t["id"]
+
+
+def test_firma_de_quien_recibe_solo_jefe_y_responsable(browser, make_user):
+    t, boss = make_user("TECNICO"), make_user("JEFE")
+    owner_browser = browser(t)
+    rid = create_report(owner_browser)
+    assert upload(owner_browser, rid, _jpeg(), kind="FIRMA_RECIBE").status_code == 403
+    manager = browser(boss)
+    assert upload(manager, rid, _jpeg(), kind="FIRMA_RECIBE").status_code == 201
+
+
+def test_invitacion_whatsapp_crea_contrasena_de_primer_acceso(browser, make_user, q):
+    admin = browser(make_user("RESPONSABLE"))
+    role_id = q("SELECT id FROM roles WHERE code = 'TECNICO'")[0]["id"]
+    created = admin.post("/administracion/usuarios", {
+        "username": "invitado_prueba", "full_name": "Invitado Prueba", "id_number": "", "role_id": role_id,
+        "phone_number": "+57 300 123 4567", "password": "Clave-Temporal-456!"},
+        csrf_from="/administracion/usuarios")
+    assert created.status_code == 302
+    user_id = q("SELECT id FROM users WHERE username = 'invitado_prueba'")[0]["id"]
+    sent = admin.post(f"/administracion/usuarios/{user_id}/invitacion-whatsapp", csrf_from="/administracion/usuarios")
+    assert sent.status_code == 303 and sent.headers["Location"].startswith("https://wa.me/573001234567?")
+    message = parse_qs(urlsplit(sent.headers["Location"]).query)["text"][0]
+    token = re.search(r"/invitacion/([A-Za-z0-9_-]+)", message).group(1)
+    first_access = browser()
+    path = f"/invitacion/{token}"
+    response = first_access.post(path, {"new": "Clave-Personal-789!", "confirm": "Clave-Personal-789!"}, csrf_from=path)
+    assert response.status_code == 302
+    assert q("SELECT must_change_password FROM users WHERE id = %s", (user_id,))[0]["must_change_password"] == 0
+    assert browser().login({"username": "invitado_prueba", "password": "Clave-Personal-789!"}).status_code == 302
+    assert first_access.get(path).status_code == 410
 
 
 # ---------------------------------------------------------------- registro de sesiones

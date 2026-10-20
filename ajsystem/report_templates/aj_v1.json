@@ -47,7 +47,6 @@
       "number": 3,
       "title": "INFORME DE SEGURIDAD Y CONTROL DE ACCESO FÍSICO",
       "fields": [
-        {"id": "proteccion_robos", "label": "Medidas de protección contra robos:", "type": "textarea", "max_length": 2000},
         {"id": "climatizacion", "label": "Sistema de climatización:", "type": "textarea", "max_length": 2000},
         {"id": "control_acceso", "label": "Control de acceso a los centros de datos:", "type": "textarea", "max_length": 2000},
         {"id": "contra_incendios", "label": "Sistema contra incendios:", "type": "textarea", "max_length": 2000},
@@ -63,7 +62,9 @@
         {"id": "parches_firmware", "label": "Parches de firmware:", "type": "textarea", "max_length": 2000},
         {"id": "politicas_reemplazo", "label": "Políticas de reemplazo:", "type": "textarea", "max_length": 2000},
         {"id": "normas_seguridad", "label": "Normas de seguridad:", "type": "textarea", "max_length": 2000},
-        {"id": "normas_ambientales", "label": "Normas medioambientales:", "type": "textarea", "max_length": 2000}
+        {"id": "normas_ambientales", "label": "Normas medioambientales:", "type": "textarea", "max_length": 2000},
+        {"id": "observaciones_habilitadas", "label": "Incluir observaciones adicionales:", "type": "checkbox"},
+        {"id": "observaciones", "label": "Observaciones adicionales:", "type": "textarea", "max_length": 2000}
       ]
     }
   ]

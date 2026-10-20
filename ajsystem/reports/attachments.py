@@ -78,6 +78,10 @@ def _reencode(raw: bytes, kind: str) -> tuple[bytes, str, int, int, bytes]:
 def add(report_id: int, user: dict, kind: str, raw: bytes, original_name: str = "") -> dict:
     if kind not in KINDS:
         raise AttachmentError("Tipo de adjunto no válido.", status=400)
+    if kind == "FIRMA_ELABORA":
+        raise AttachmentError("La firma de quien elabora se administra desde Mi perfil.", status=403)
+    if kind == "FIRMA_RECIBE" and user.get("role_code") not in {"JEFE", "RESPONSABLE"}:
+        raise AttachmentError("Solo el jefe o el responsable pueden registrar la firma de quien recibe.", status=403)
     if not raw:
         raise AttachmentError("No se recibió ninguna imagen.", status=400)
     if len(raw) > MAX_UPLOAD_BYTES:
@@ -123,6 +127,15 @@ def remove(report_id: int, user: dict, public_id: str) -> None:
         if not service.capabilities(report, user)["edit"]:
             raise AttachmentError("El informe está cerrado o no tiene permiso para modificarlo.", status=403,
                                   code="bloqueado")
+        cur.execute("SELECT kind FROM report_attachments WHERE report_id = %s AND public_id = %s AND deleted_at IS NULL",
+                    (report_id, public_id))
+        attachment = cur.fetchone()
+        if not attachment:
+            raise service.ReportNotFound()
+        if attachment["kind"] == "FIRMA_ELABORA":
+            raise AttachmentError("La firma de quien elabora se administra desde Mi perfil.", status=403)
+        if attachment["kind"] == "FIRMA_RECIBE" and user.get("role_code") not in {"JEFE", "RESPONSABLE"}:
+            raise AttachmentError("Solo el jefe o el responsable pueden retirar la firma de quien recibe.", status=403)
         cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s "
                     "WHERE report_id = %s AND public_id = %s AND deleted_at IS NULL",
                     (db.utcnow(), user["id"], report_id, public_id))
@@ -164,8 +177,17 @@ def content(report_id: int, public_id: str, thumb: bool = False) -> dict | None:
 
 def for_document(report_id: int) -> list[dict]:
     """Adjuntos vigentes con contenido, para incrustarlos en el PDF."""
-    return db.query_all(
+    files = db.query_all(
         """SELECT a.public_id, a.kind, a.mime, a.content, a.width, a.height, a.created_at, a.sha256,
                   u.full_name AS created_by_name
              FROM report_attachments a JOIN users u ON u.id = a.created_by
             WHERE a.report_id = %s AND a.deleted_at IS NULL ORDER BY a.created_at, a.id""", (report_id,))
+    if not any(a["kind"] == "FIRMA_ELABORA" for a in files):
+        owner = db.query_one(
+            """SELECT s.mime, s.content, s.width, s.height, s.updated_at AS created_at, s.sha256,
+                      u.full_name AS created_by_name
+                 FROM reports r JOIN user_signatures s ON s.user_id = r.owner_id
+                 JOIN users u ON u.id = r.owner_id WHERE r.id = %s""", (report_id,))
+        if owner:
+            files.append({"public_id": None, "kind": "FIRMA_ELABORA", **owner})
+    return files

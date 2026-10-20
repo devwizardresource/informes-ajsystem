@@ -34,6 +34,7 @@
   </nav>
   <div class="userbox">
     <span class="who"><strong>{{ current_user.full_name }}</strong><small>{{ current_user.role_name }}</small></span>
+    <a class="link-small" href="{{ url_for('auth.profile') }}">Mi perfil</a>
     <a class="link-small" href="{{ url_for('auth.change_password') }}">Contraseña</a>
     <form method="post" action="{{ url_for('auth.logout') }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

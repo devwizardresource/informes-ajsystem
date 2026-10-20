@@ -23,7 +23,11 @@ from . import schema
 
 SOURCE = Path(__file__).resolve().parent.parent.parent / "resources" / "Plantilla_Informe_AJ_System.html"
 # Filas del formato que no están en la plantilla original: campo → etiqueta tras la que se insertan.
-EXTRA_ROWS_AFTER = {"marca": "Dispositivo:"}
+EXTRA_ROWS_AFTER = {
+    "marca": "Dispositivo:",
+    "observaciones_habilitadas": "Normas medioambientales:",
+    "observaciones": "Incluir observaciones adicionales:",
+}
 
 _ROW_RE = re.compile(r'<tr><td class="lbl">(?P<label>.*?)</td><td class="val">(?P<val>.*?)</td></tr>', re.S)
 _STYLE_RE = re.compile(r"<style>(.*?)</style>", re.S)
@@ -87,7 +91,16 @@ def _field_html(f: schema.Field, value, editable: bool, error: str | None, stati
         opts = "".join(
             f'<label><input type="radio" name="{f.id}" value="{_attr(o)}"{" checked" if v == o else ""}'
             f'{"" if editable else " disabled"}> {html.escape(o)}</label>' for o in f.options)
-        out = f'<div class="choices">{opts}</div>'
+        current = f"Seleccionado: {v}" if v else "Sin seleccionar"
+        out = (f'<div class="choices" data-choice-group>{opts}'
+               f'<output class="choice-current" aria-live="polite">{html.escape(current)}</output></div>')
+    elif f.type == "checkbox":
+        checked = bool(value)
+        if static:
+            out = f'<span class="check-static">{"✓ Incluido" if checked else "No incluido"}</span>'
+        else:
+            out = (f'<label class="check-value"><input type="checkbox" id="f-{f.id}" name="{f.id}" value="1"'
+                   f'{" checked" if checked else ""}{"" if editable else " disabled"}> Sí</label>')
     elif not editable:
         ph = f' data-ph="{_attr(f.placeholder)}"' if f.placeholder else ""
         out = f'<div contenteditable="false"{ph}>{html.escape(v)}</div>'
@@ -105,18 +118,23 @@ def _field_html(f: schema.Field, value, editable: bool, error: str | None, stati
     return out
 
 
-def _row(f: schema.Field, value, editable: bool, error: str | None, static: bool = False) -> str:
+def _row(f: schema.Field, value, editable: bool, error: str | None, static: bool = False,
+         visible: bool = True) -> str:
     req = ' <span class="req" title="Obligatorio para cerrar">*</span>' if editable and f.required_on_close else ""
     label = f'<label for="f-{f.id}">{html.escape(f.label)}</label>' if editable and f.widget != "radio" \
         else html.escape(f.label)
     cls = "val has-error" if error else "val"
-    return (f'<tr><td class="lbl">{label}{req}</td>'
+    row_attrs = ""
+    if f.id == "observaciones":
+        row_attrs = ' data-conditional-field="observaciones"' + ('' if visible else ' hidden')
+    return (f'<tr{row_attrs}><td class="lbl">{label}{req}</td>'
             f'<td class="{cls}" data-field="{f.id}">{_field_html(f, value, editable, error, static)}</td></tr>')
 
 
 def render(template: schema.Template, values: dict, *, editable: bool, errors: dict | None = None,
            number: str = "", year: str = "", registro: dict | None = None, signatures: dict | None = None,
-           logo_src: str | None = None, static: bool = False) -> str:
+           logo_src: str | None = None, static: bool = False, can_receive_signature: bool = False,
+           profile_url: str | None = None) -> str:
     """HTML de la hoja (<main class="sheet">) con los datos del informe.
 
     signatures: {"FIRMA_ELABORA": url_o_data_uri, ...}; logo_src: URL del logo (None = el de la plantilla);
@@ -129,19 +147,32 @@ def render(template: schema.Template, values: dict, *, editable: bool, errors: d
     by_label = {_norm(f.label): f for f in template.fields}
     used: set[str] = set()
 
+    def appended_rows(field: schema.Field) -> str:
+        out = ""
+        for extra_id, after in EXTRA_ROWS_AFTER.items():
+            if _norm(after) != _norm(field.label):
+                continue
+            extra = template.field(extra_id)
+            if extra is None or extra.id in used:
+                continue
+            used.add(extra.id)
+            visible = bool(values.get("observaciones_habilitadas", False))
+            render_extra = not (static and extra.id == "observaciones_habilitadas")
+            render_extra = render_extra and not (static and extra.id == "observaciones" and not visible)
+            if render_extra:
+                out += _row(extra, values.get(extra.id), editable, errors.get(extra.id), static,
+                            visible=visible if extra.id == "observaciones" else True)
+            out += appended_rows(extra)
+        return out
+
     def row_sub(m: re.Match) -> str:
         f = by_label.get(_norm(m.group("label")))
         if f is None:  # fila de la plantilla sin campo: se deja tal cual, vacía y sin edición
             return m.group(0).replace('contenteditable="true"', 'contenteditable="false"')
         used.add(f.id)
-        out = _row(f, values.get(f.id), editable, errors.get(f.id), static)
-        for extra_id, after in EXTRA_ROWS_AFTER.items():
-            if _norm(after) == _norm(f.label):
-                extra = template.field(extra_id)
-                if extra is not None:
-                    used.add(extra.id)
-                    out += _row(extra, values.get(extra.id), editable, errors.get(extra.id), static)
-        return out
+        out = _row(f, values.get(f.id), editable, errors.get(f.id), static,
+                   visible=bool(values.get("observaciones_habilitadas", False)) if f.id == "observaciones" else True)
+        return out + appended_rows(f)
 
     main = _ROW_RE.sub(row_sub, src.main)
     missing = [f.label for f in template.fields if f.id not in used]
@@ -164,9 +195,11 @@ def render(template: schema.Template, values: dict, *, editable: bool, errors: d
         caption = cap.group(1) if cap else ""
         url = signatures.get(kind)
         img = f'<img alt="{_attr(caption)}" src="{_attr(url)}">' if url else '<img alt="" hidden>'
-        if not editable:
+        if not editable or kind == "FIRMA_ELABORA" or not can_receive_signature:
+            hint = (f'<p class="sig-profile-hint"><a href="{_attr(profile_url)}">Cargue su firma en Mi perfil.</a></p>'
+                    if kind == "FIRMA_ELABORA" and editable and not url and profile_url else "")
             return (f'<div class="sig readonly{" has" if url else ""}" data-kind="{kind}"><div class="pad">{img}</div>'
-                    f'<div class="sig-cap">{caption}</div></div>')
+                    f'<div class="sig-cap">{caption}</div></div>{hint}')
         return (f'<div class="sig{" has" if url else ""}" data-kind="{kind}"><div class="pad"><canvas></canvas>{img}'
                 f'<span class="ph">Firme aquí o cargue una imagen</span></div><div class="sig-cap">{caption}</div>'
                 '<div class="tools"><button type="button" data-act="save">Guardar firma</button>'

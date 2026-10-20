@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Crear contraseña{% endblock %}
+{% block content %}
+<section class="card narrow invitation-card">
+  <h1>Activar acceso</h1>
+  <p>Hola, <strong>{{ invited.full_name }}</strong>. Cree una contraseña para entrar a AJ System con el usuario <code>{{ invited.username }}</code>.</p>
+  <form method="post" data-busy>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="new">Nueva contraseña</label>
+    <p class="help">Mínimo 12 caracteres, con minúscula, mayúscula, número y símbolo.</p>
+    <input id="new" name="new" type="password" autocomplete="new-password" data-reveal-password minlength="12" required>
+    {% if errors.password %}<p class="field-error">{{ errors.password }}</p>{% endif %}
+    <label for="confirm">Confirmar contraseña</label>
+    <input id="confirm" name="confirm" type="password" autocomplete="new-password" data-reveal-password minlength="12" required>
+    {% if errors.confirm %}<p class="field-error">{{ errors.confirm }}</p>{% endif %}
+    <button type="submit" class="btn btn-primary btn-block">Crear contraseña</button>
+  </form>
+</section>
+{% endblock %}

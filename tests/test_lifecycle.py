@@ -101,7 +101,7 @@ def test_envio_y_visibilidad_en_paneles(browser, make_user, q):
     rid = create_report(b)
     fill(b, q, rid, accion="cerrar", nombre="Equipo de contabilidad", numero_serie="SN-VIS-77")
     code = q("SELECT code FROM reports WHERE id = %s", (rid,))[0]["code"]
-    # Antes de enviar: no visible para los destinatarios
+    # Inicio muestra envíos recientes; la Consolidación permite abrir todos los informes.
     assert code not in browser(j).get("/").get_data(as_text=True)
     r = b.post(f"/informes/{rid}/enviar", {"op_id": new_op()})
     assert r.status_code == 302 and status(q, rid) == "ENVIADO"

@@ -14,6 +14,7 @@ import datetime as dt
 import hashlib
 import json
 import re
+import uuid
 from zoneinfo import ZoneInfo
 
 from flask import current_app
@@ -152,6 +153,36 @@ def _insert_version(cur, report_id, revision, cols, data, user, now):
     )
 
 
+def _snapshot_owner_signature(cur, report: dict, actor: dict, now) -> None:
+    """Freeze the report author's current profile signature when the report is closed."""
+    cur.execute("SELECT mime, size_bytes, width, height, sha256, content FROM user_signatures WHERE user_id = %s",
+                (report["owner_id"],))
+    signature = cur.fetchone()
+    if not signature:
+        return
+    cur.execute("""SELECT public_id, sha256 FROM report_attachments
+                    WHERE report_id = %s AND kind = 'FIRMA_ELABORA' AND deleted_at IS NULL FOR UPDATE""",
+                (report["id"],))
+    existing = cur.fetchall()
+    if any(row["sha256"] == signature["sha256"] for row in existing):
+        return
+    if existing:
+        cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s "
+                    "WHERE report_id = %s AND kind = 'FIRMA_ELABORA' AND deleted_at IS NULL",
+                    (now, actor["id"], report["id"]))
+    public_id = uuid.uuid4().hex
+    cur.execute(
+        """INSERT INTO report_attachments (public_id, report_id, kind, mime, size_bytes, width, height, sha256,
+                                           content, thumb, original_name, created_by, created_at)
+           VALUES (%s, %s, 'FIRMA_ELABORA', %s, %s, %s, %s, %s, %s, NULL, 'firma-perfil', %s, %s)""",
+        (public_id, report["id"], signature["mime"], signature["size_bytes"], signature["width"],
+         signature["height"], signature["sha256"], signature["content"], report["owner_id"], now))
+    audit.write(cur, audit.ATTACHMENT_ADDED, "EXITO", object_type="informe", object_id=report["code"],
+                detail={"informe_id": report["id"], "adjunto": public_id, "tipo": "FIRMA_ELABORA",
+                        "firma_de_perfil": True, "sha256": signature["sha256"],
+                        "firma_anterior_reemplazada": len(existing)})
+
+
 # ---------------------------------------------------------------------------
 # Operaciones
 # ---------------------------------------------------------------------------
@@ -275,6 +306,7 @@ def close(report_id: int, user: dict, form, expected_revision, idem_key: str | N
         if missing:
             raise ReportError("Faltan campos obligatorios para cerrar el informe. Los cambios no se guardaron.", status=422,
                               field_errors=missing, code="validacion")
+        _snapshot_owner_signature(cur, report, user, now)
         cur.execute("UPDATE reports SET status_code = %s, closed_at = %s, closed_by = %s, updated_at = %s, "
                     "updated_by = %s WHERE id = %s AND status_code = %s",
                     (CERRADO, now, user["id"], now, user["id"], report_id, report["status_code"]))
@@ -515,6 +547,37 @@ def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dic
                    r.created_at, r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count
               FROM reports r WHERE r.owner_id = %s AND r.deleted_at IS NULL AND r.status_code IN ({placeholders})
              ORDER BY r.updated_at DESC LIMIT %s""", (user["id"], *statuses, limit))
+
+
+def home_lists(user: dict) -> dict[str, list[dict]]:
+    """Load the three lists owned by the user with one indexed database round-trip."""
+    names = ("id", "code", "title", "equipment_serial", "equipment_brand", "status_code", "revision",
+             "created_at", "updated_at", "closed_at", "last_sent_at", "reopen_count")
+    columns = ", ".join(names)
+    qualified_columns = ", ".join(f"q.{name}" for name in names)
+    groups = (
+        ("drafts", (EN_ELABORACION, REABIERTO), 50),
+        ("closed_pending", (CERRADO,), 50),
+        ("sent_own", (ENVIADO,), 20),
+    )
+    branches, params = [], []
+    for bucket, statuses, limit in groups:
+        placeholders = ",".join(["%s"] * len(statuses))
+        branches.append(
+            f"""SELECT '{bucket}' AS dashboard_bucket, {qualified_columns}
+                  FROM (SELECT {columns} FROM reports
+                         WHERE owner_id = %s AND deleted_at IS NULL AND status_code IN ({placeholders})
+                         ORDER BY updated_at DESC, id DESC LIMIT %s) AS q""")
+        params.extend((user["id"], *statuses, limit))
+
+    rows = db.query_all(" UNION ALL ".join(branches), tuple(params))
+    result = {bucket: [] for bucket, _statuses, _limit in groups}
+    for row in rows:
+        bucket = row.pop("dashboard_bucket")
+        result[bucket].append(row)
+    for values in result.values():
+        values.sort(key=lambda row: (row["updated_at"], row["id"]), reverse=True)
+    return result
 
 
 def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[dict], int]:

@@ -57,7 +57,6 @@ EXTRA_HEADERS: dict[str, tuple[str, ...]] = {
     "politicas_reemplazo": ("politicas de reemplazo", "politica de reemplazo"),
     "normas_seguridad": ("normas de seguridad",),
     "normas_ambientales": ("normas medioambientales", "normas ambientales"),
-    "proteccion_robos": ("medidas de proteccion contra robos", "proteccion contra robos"),
     "climatizacion": ("sistema de climatizacion", "climatizacion"),
     "control_acceso": ("control de acceso a los centros de datos", "control de acceso"),
     "contra_incendios": ("sistema contra incendios", "contra incendios"),

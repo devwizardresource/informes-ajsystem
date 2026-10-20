@@ -11,7 +11,7 @@
       <label for="username">Usuario o número de identificación</label>
       <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="64" value="{{ username or '' }}" autofocus>
       <label for="password">Contraseña</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+      <input id="password" name="password" type="password" autocomplete="current-password" data-reveal-password required maxlength="256">
       <button type="submit" class="btn btn-primary btn-block">Entrar</button>
     </form>
   </section>

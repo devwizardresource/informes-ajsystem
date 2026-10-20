@@ -25,7 +25,7 @@
   <input id="foto-archivo" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-photo-input>
   <button type="submit" form="report-form" name="accion" value="guardar">Guardar cambios</button>
   {% if caps.close %}<button type="submit" form="report-form" name="accion" value="cerrar" class="warn"
-      data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado: para volver a editarlo habrá que solicitar la reapertura.">Cerrar informe</button>{% endif %}
+      data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado; cualquier usuario podrá reabrirlo después indicando el motivo.">Cerrar informe</button>{% endif %}
   {% endif %}
   <button type="button" class="ghost" data-print>Imprimir / Guardar como PDF</button>
   {% if editable %}<button type="button" class="ghost" data-clear-form>Limpiar formulario</button>{% endif %}
@@ -52,7 +52,7 @@
 {% endwith %}
 {% if pending %}<p class="notice">Solicitud de reapertura pendiente de {{ pending.requested_by_name }} ({{ pending.created_at|localdt }}): «{{ pending.reason }}»</p>{% endif %}
 {% if report.status_code in ('CERRADO', 'ENVIADO') %}
-<p class="notice">Informe cerrado: el contenido está bloqueado.{% if caps.request_reopen %} Para corregirlo, solicite permiso al jefe o al responsable (abajo).{% endif %}</p>
+<p class="notice">Informe cerrado: el contenido está bloqueado.{% if caps.reopen %} Use «Reabrir para editar» e indique el motivo; no requiere aprobación.{% elif caps.request_reopen %} Para corregirlo, solicite permiso al jefe o al responsable (abajo).{% endif %}</p>
 {% elif editable %}
 <p class="notice">Escriba en la hoja o tome una foto clara de las características del equipo: los campos vacíos se completan solos. «Guardar cambios» conserva el informe abierto.</p>
 {% endif %}
@@ -83,7 +83,7 @@
   <div class="actions">
     <button type="submit" form="report-form" name="accion" value="guardar" class="btn">Guardar cambios</button>
     {% if caps.close %}<button type="submit" form="report-form" name="accion" value="cerrar" class="btn warn"
-        data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado: para volver a editarlo habrá que solicitar la reapertura.">Cerrar informe y registrar</button>{% endif %}
+        data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado; cualquier usuario podrá reabrirlo después indicando el motivo.">Cerrar informe y registrar</button>{% endif %}
   </div>
 </div>
 {% endif %}

@@ -19,6 +19,29 @@
     b.addEventListener("click", function () { window.print(); });
   });
 
+  // Permite verificar lo escrito; las contraseñas guardadas nunca se pueden recuperar.
+  document.querySelectorAll("input[data-reveal-password]").forEach(function (input) {
+    var wrap = document.createElement("div");
+    wrap.className = "password-field";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "password-reveal";
+    button.textContent = "Mostrar";
+    button.setAttribute("aria-label", "Mostrar contraseña escrita");
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", function () {
+      var visible = input.type === "password";
+      input.type = visible ? "text" : "password";
+      button.textContent = visible ? "Ocultar" : "Mostrar";
+      button.setAttribute("aria-label", (visible ? "Ocultar" : "Mostrar") + " contraseña escrita");
+      button.setAttribute("aria-pressed", visible ? "true" : "false");
+      input.focus();
+    });
+    wrap.appendChild(button);
+  });
+
   // Áreas de texto que crecen con su contenido (celdas del formato de informe)
   function grow(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
   document.querySelectorAll("textarea[data-autogrow]").forEach(function (t) {
