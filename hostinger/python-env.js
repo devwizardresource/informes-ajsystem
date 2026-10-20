@@ -66,20 +66,39 @@ function isReady() {
   return run(venvPython(), ["-c", "import flask, pymysql, gunicorn, argon2, PIL, openpyxl"]).ok;
 }
 
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (err) { return err.code === "EPERM"; }
+}
+
+function takeBuildLock() {
+  fs.mkdirSync(BUILD_LOCK);
+  fs.writeFileSync(path.join(BUILD_LOCK, "pid"), String(process.pid));
+}
+
+// El bloqueo es abandonado si su dueño ya no existe (Hostinger termina procesos a mitad de la
+// instalación al desplegar), si no dejó PID o si es demasiado antiguo.
+function buildLockAbandoned() {
+  const st = fs.statSync(BUILD_LOCK);
+  if (Date.now() - st.mtimeMs > BUILD_LOCK_STALE_MS) return true;
+  let pid = NaN;
+  try { pid = Number(fs.readFileSync(path.join(BUILD_LOCK, "pid"), "utf8")); } catch { /* aún sin PID */ }
+  if (!pid) return Date.now() - st.mtimeMs > 10000;
+  return !pidAlive(pid);
+}
+
 function acquireBuildLock() {
   try {
     fs.mkdirSync(path.dirname(BUILD_LOCK), { recursive: true });
-    fs.mkdirSync(BUILD_LOCK);
+    takeBuildLock();
     return true;
   } catch (err) {
     // Sin directorio escribible para el bloqueo se continúa sin él (comportamiento anterior).
     if (err.code !== "EEXIST") return true;
   }
-  // Bloqueo de un proceso que murió a mitad de la instalación.
   try {
-    if (Date.now() - fs.statSync(BUILD_LOCK).mtimeMs > BUILD_LOCK_STALE_MS) {
+    if (buildLockAbandoned()) {
       fs.rmSync(BUILD_LOCK, { recursive: true, force: true });
-      fs.mkdirSync(BUILD_LOCK);
+      takeBuildLock();
       return true;
     }
   } catch { /* otro proceso lo tomó antes */ }
