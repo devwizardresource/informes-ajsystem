@@ -1,13 +1,14 @@
 """AJ System — fábrica de la aplicación Flask."""
 from __future__ import annotations
 
+import html
 import logging
 import os
 import uuid
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from flask import Flask, g, redirect, render_template, request, url_for
+from flask import Flask, Response, g, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 
 from . import audit, db
@@ -18,7 +19,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
@@ -140,10 +141,24 @@ def create_app(overrides: dict | None = None) -> Flask:
             return ""
         return value.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime(fmt)
 
+    def _error_page(code: int, message: str):
+        try:
+            return render_template("error.html", code=code, message=message), code
+        except Exception:  # noqa: BLE001
+            # Si la propia plantilla falla (p. ej. código y plantillas de versiones distintas durante un
+            # despliegue), se responde una página mínima: nunca una respuesta en blanco.
+            app.logger.exception("No se pudo renderizar la página de error %s", code)
+            body = (f'<!doctype html><html lang="es"><head><meta charset="utf-8"><title>AJ System</title>'
+                    f'<meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+                    f'<body style="font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem">'
+                    f'<h1>Error {code}</h1><p>{html.escape(message)}</p><p><a href="/">Volver al inicio</a></p>'
+                    f'</body></html>')
+            return Response(body, status=code, mimetype="text/html")
+
     @app.errorhandler(HTTPException)
     def _http_error(exc: HTTPException):
         code = exc.code or 500
-        return render_template("error.html", code=code, message=ERROR_MESSAGES.get(code, ERROR_MESSAGES[500])), code
+        return _error_page(code, ERROR_MESSAGES.get(code, ERROR_MESSAGES[500]))
 
     @app.errorhandler(Exception)
     def _unhandled(exc: Exception):
@@ -155,7 +170,7 @@ def create_app(overrides: dict | None = None) -> Flask:
                                        detail={"ruta": request.path[:200], "tipo": type(exc).__name__})
         except Exception:  # noqa: BLE001
             app.logger.exception("No se pudo registrar el error en auditoría")
-        return render_template("error.html", code=500, message=ERROR_MESSAGES[500]), 500
+        return _error_page(500, ERROR_MESSAGES[500])
 
     from .cli import register_cli  # noqa: PLC0415
     register_cli(app)

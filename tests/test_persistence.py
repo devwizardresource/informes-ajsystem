@@ -171,3 +171,19 @@ def test_migracion_interrumpida_se_reanuda_sin_perder_datos(root_conn_factory, t
         with conn.cursor() as cur:
             cur.execute("DROP DATABASE IF EXISTS ajsys_test_resume")
         conn.close()
+
+
+def test_error_con_plantilla_rota_no_deja_la_pagina_en_blanco(app, browser, make_user, monkeypatch):
+    """Código y plantillas de versiones distintas (despliegue a medias): la respuesta nunca queda vacía."""
+    import ajsystem
+
+    def broken(*_a, **_k):
+        raise RuntimeError("plantilla de otra versión")
+
+    b = browser(make_user("TECNICO"))
+    monkeypatch.setattr("ajsystem.web.home.render_template", broken)
+    monkeypatch.setattr(ajsystem, "render_template", broken)
+    r = b.get("/")
+    body = r.get_data(as_text=True)
+    assert r.status_code == 500 and r.mimetype == "text/html"
+    assert "Error 500" in body and "Volver al inicio" in body

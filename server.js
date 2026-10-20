@@ -107,10 +107,73 @@ function startGunicorn(py) {
   });
 }
 
+// ---------------------------------------------------------------- recarga tras despliegue
+//
+// Hostinger puede reemplazar los archivos de un despliegue sin reiniciar este proceso. Los
+// workers de gunicorn seguirían con el código Python anterior en memoria mientras leen
+// plantillas nuevas del disco (versiones mezcladas: páginas que fallan o quedan en blanco).
+// Se vigila el código y, cuando cambia y se estabiliza, se migra y se recargan los workers
+// con SIGHUP (gunicorn arranca workers nuevos antes de retirar los antiguos: sin corte).
+
+const WATCHED = ["ajsystem", "migrations", "resources", "sql", "requirements.lock", "wsgi.py"];
+const NODE_FILES = ["server.js", "hostinger"];
+const RELOAD_CHECK_MS = Math.max(5, Number(process.env.AJS_RELOAD_CHECK_SECONDS || 20)) * 1000;
+
+function fingerprint(entries) {
+  const hash = require("node:crypto").createHash("sha256");
+  const walk = (rel) => {
+    let st;
+    try { st = fs.statSync(path.join(ROOT, rel)); } catch { return; }
+    if (st.isDirectory()) {
+      if (rel.endsWith("__pycache__")) return;
+      for (const name of fs.readdirSync(path.join(ROOT, rel)).sort()) walk(path.join(rel, name));
+    } else {
+      hash.update(`${rel}\0${st.size}\0${st.mtimeMs}\n`);
+    }
+  };
+  entries.forEach(walk);
+  return hash.digest("hex");
+}
+
+let runningCode = null;
+let runningNode = null;
+let pendingCode = null;
+let reloading = false;
+
+async function checkForDeploy(py) {
+  if (reloading || shuttingDown || !child) return;
+  const current = fingerprint(WATCHED);
+  if (current === runningCode) { pendingCode = null; return; }
+  // Se espera a que el código deje de cambiar (despliegue terminado) antes de recargar.
+  if (current !== pendingCode) { pendingCode = current; log("Cambio de código detectado; esperando a que termine el despliegue ..."); return; }
+  reloading = true;
+  try {
+    verifyVendorIntegrity();
+    py = ensurePythonEnv();
+    if (process.env.AJS_AUTO_MIGRATE !== "0") {
+      const migrator = process.env.AJS_DB_ADMIN_USER || process.env.AJS_DB_USER;
+      await runFlask(py, ["db-migrate", "--user", migrator]);
+    }
+    runningCode = current;
+    pendingCode = null;
+    child.kill("SIGHUP");
+    log("Código nuevo cargado: workers de gunicorn recargados.");
+    if (fingerprint(NODE_FILES) !== runningNode) {
+      log("AVISO: server.js u hostinger/ cambiaron; reinicie la aplicación en hPanel para aplicar esa parte.");
+    }
+  } catch (err) {
+    log(`No se pudo recargar el código nuevo (se reintenta): ${err.message}`);
+  } finally {
+    reloading = false;
+  }
+}
+
 async function boot() {
   try {
     log(`${verifyVendorIntegrity()} archivos de terceros verificados (SHA-256).`);
     const py = ensurePythonEnv();
+    runningCode = fingerprint(WATCHED);
+    runningNode = fingerprint(NODE_FILES);
     if (process.env.AJS_AUTO_MIGRATE !== "0") {
       const migrator = process.env.AJS_DB_ADMIN_USER || process.env.AJS_DB_USER;
       log(`Aplicando migraciones pendientes con la cuenta '${migrator}' ...`);
@@ -134,6 +197,7 @@ async function boot() {
     await waitForBackend(backendPort);
     backendReady = true;
     log(`AJ System listo (backend en ${backendSocketPath || `127.0.0.1:${backendPort}`}).`);
+    setInterval(() => { checkForDeploy(py); }, RELOAD_CHECK_MS).unref();
   } catch (err) {
     startupError = err;
     log(`ERROR de arranque: ${err.message}`);

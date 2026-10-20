@@ -41,6 +41,8 @@ AJS_INITIAL_ADMIN_PASSWORD=<temporal; se cambia en el primer acceso>
 4. Despliegue. En el primer arranque se aplican las migraciones y se crea el responsable inicial (solo si no existe ninguno). Active el certificado SSL del dominio: la cookie de sesión exige HTTPS.
 5. Cada `git push` a `main` se vuelve a desplegar (si activa el despliegue automático); las migraciones nuevas se aplican al arrancar. **Haga un respaldo antes de publicar una migración.** Si un arranque se corta a mitad de una migración (reinicio del proceso en Hostinger), el siguiente arranque la reanuda: omite lo que ya quedó creado (columnas, tablas, índices) y aplica el resto, sin tocar los datos existentes.
 
+**Recarga tras despliegue:** si Hostinger reemplaza los archivos sin reiniciar la aplicación, `server.js` detecta el cambio (cada 20 s; ajustable con `AJS_RELOAD_CHECK_SECONDS`), verifica integridad, aplica migraciones y recarga los workers de gunicorn sin corte. Así no conviven el código Python anterior y las plantillas nuevas (causa de la página de Inicio en blanco del 2026-10-20). Los cambios en `server.js` o `hostinger/` sí requieren reiniciar la app en hPanel.
+
 Variables opcionales: `AJS_AUTO_MIGRATE=0` (no migrar al arrancar), `AJS_DB_ADMIN_USER`/`AJS_DB_ADMIN_PASSWORD` (cuenta distinta para migrar), `AJS_PYTHON` (ruta del intérprete), `AJS_WORKERS`/`AJS_THREADS` (por defecto 2/4), `AJS_EDGE_PROXY_HOPS` (proxies de Hostinger delante de Node, por defecto 1).
 
 ### Antes de cada despliegue
