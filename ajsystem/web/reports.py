@@ -12,7 +12,7 @@ from ..reports import attachments, extract, importer, schema, service, sheet
 from ..security.authz import deny, has_perm, login_required, require_perm
 
 bp = Blueprint("reports", __name__, url_prefix="/informes")
-UPLOAD_ENDPOINTS = {"reports.attachment_add", "reports.import_matrix", "auth.profile_signature"}
+UPLOAD_ENDPOINTS = {"reports.attachment_add", "reports.import_matrix", "auth.profile_signature", "admin.users_signature"}
 _PUBLIC_ID = re.compile(r"^[0-9a-f]{32}$")
 
 

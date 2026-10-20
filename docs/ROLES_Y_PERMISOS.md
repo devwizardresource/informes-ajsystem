@@ -52,7 +52,7 @@ Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la
 2. «Pendientes de revisión» se interpreta, por ahora, como los informes enviados alguna vez que están reabiertos, o cerrados sin reenviar. No existe un estado formal de «revisado»; si se necesita, debe definirse como regla de negocio nueva.
 3. La gestión de usuarios (altas, roles, activación, restablecimiento de contraseña e invitaciones) corresponde solo al responsable administrativo.
 4. Cambiar el rol, desactivar una cuenta o restablecer su contraseña **revoca las sesiones abiertas** de ese usuario. No se puede desactivar ni degradar al último responsable activo.
-5. El técnico carga su firma desde **Mi perfil**; esa imagen se muestra en «Firma digital de quien elabora». Solo el jefe y el responsable pueden cargar o retirar «Firma digital de quien recibe».
+5. El técnico puede cargar su firma desde **Mi perfil**. El responsable también puede cargar o reemplazar la firma de las cuentas con rol Técnico desde **Usuarios**; la imagen se copia a los informes nuevos al cerrarlos y se muestra en «Firma digital de quien elabora». Solo el jefe y el responsable pueden cargar o retirar «Firma digital de quien recibe».
 
 Las invitaciones de primer acceso se preparan en **Usuarios → Invitar por WhatsApp**. El responsable debe registrar el número internacional; el sistema abre WhatsApp Web con el mensaje y un enlace de un solo uso que vence en 72 horas. El responsable pulsa Enviar en WhatsApp.
 

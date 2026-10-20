@@ -48,7 +48,8 @@ def roles() -> list[dict]:
 def list_users() -> list[dict]:
     return db.query_all(
         """SELECT u.id, u.username, u.full_name, u.id_number, u.phone_number, u.is_active, u.must_change_password, u.created_at,
-                  u.last_login_at, r.code AS role_code, r.display_name AS role_name
+                  u.last_login_at, r.code AS role_code, r.display_name AS role_name,
+                  EXISTS(SELECT 1 FROM user_signatures s WHERE s.user_id = u.id) AS has_signature
              FROM users u JOIN roles r ON r.id = u.role_id ORDER BY r.id, u.full_name""")
 
 
@@ -225,7 +226,7 @@ def signature_for(user_id: int) -> dict | None:
                         "FROM user_signatures WHERE user_id = %s", (user_id,))
 
 
-def save_signature(user: dict, raw: bytes) -> None:
+def _signature_image(raw: bytes) -> tuple[bytes, str, int, int]:
     from .reports.attachments import MAX_UPLOAD_BYTES, _reencode  # noqa: PLC0415
 
     if not raw:
@@ -237,18 +238,40 @@ def save_signature(user: dict, raw: bytes) -> None:
     except Exception as exc:  # AttachmentError is a user-safe report validation error.
         message = getattr(exc, "message", "La imagen de firma no es válida.")
         raise UserError(message) from exc
+    return content, mime, width, height
+
+
+def _store_signature(user_id: int, raw: bytes, *, required_role: str | None, change: str) -> None:
+    content, mime, width, height = _signature_image(raw)
     digest = hashlib.sha256(content).hexdigest()
     now = db.utcnow()
     with db.transaction() as cur:
+        cur.execute("""SELECT u.id, u.username, r.code AS role_code FROM users u
+                         JOIN roles r ON r.id = u.role_id WHERE u.id = %s FOR UPDATE""", (user_id,))
+        target = cur.fetchone()
+        if not target:
+            raise UserError("Usuario no encontrado.")
+        if required_role and target["role_code"] != required_role:
+            raise UserError("Solo puede cargar la firma de un usuario con rol Técnico.")
         cur.execute(
             """INSERT INTO user_signatures (user_id, mime, size_bytes, width, height, sha256, content, updated_at)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                ON DUPLICATE KEY UPDATE mime = VALUES(mime), size_bytes = VALUES(size_bytes), width = VALUES(width),
                    height = VALUES(height), sha256 = VALUES(sha256), content = VALUES(content), updated_at = VALUES(updated_at)""",
-            (user["id"], mime, len(content), width, height, digest, content, now))
-        audit.write(cur, audit.USER_UPDATED, "EXITO", object_type="usuario", object_id=user["username"],
-                    detail={"usuario_id": user["id"], "cambio": "firma digital de perfil",
+            (user_id, mime, len(content), width, height, digest, content, now))
+        audit.write(cur, audit.USER_UPDATED, "EXITO", object_type="usuario", object_id=target["username"],
+                    detail={"usuario_id": user_id, "cambio": change,
                             "sha256": digest, "bytes": len(content)})
+
+
+def save_signature(user: dict, raw: bytes) -> None:
+    _store_signature(user["id"], raw, required_role=None, change="firma digital de perfil")
+
+
+def save_technician_signature(user_id: int, raw: bytes) -> None:
+    """Carga o reemplaza la firma de elaboración de una cuenta de rol TECNICO."""
+    _store_signature(user_id, raw, required_role="TECNICO",
+                     change="firma de perfil del técnico cargada por responsable")
 
 
 def issue_invitation(user_id: int, actor: dict) -> tuple[str, str, str, str]:

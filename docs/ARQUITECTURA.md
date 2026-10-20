@@ -155,3 +155,4 @@ El número de serie del equipo **no** identifica al informe: un mismo equipo pue
 | `/consolidacion` | GET | `module.consolidation`, `report.view_sent` |
 | `/registro`, `/registro/sesiones`, `/registro/verificar` | GET / POST | `module.audit_log`, `audit.read` / `audit.verify` |
 | `/administracion/...` | GET/POST | `users.manage` |
+| `/administracion/usuarios/<id>/firma` | POST | `users.manage`; solo cuentas con rol `TECNICO` |

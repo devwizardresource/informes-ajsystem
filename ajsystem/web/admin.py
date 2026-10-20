@@ -70,6 +70,19 @@ def users_phone_number(user_id: int):
                 ok="Número de WhatsApp actualizado.")
 
 
+@bp.route("/usuarios/<int:user_id>/firma", methods=["POST"])
+@require_perm("users.manage")
+def users_signature(user_id: int):
+    upload = request.files.get("firma")
+    try:
+        users.save_technician_signature(user_id, upload.read() if upload else b"")
+    except users.UserError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("admin.users_index"))
+    flash("Firma del técnico guardada. Se usará en sus informes nuevos al cerrar.", "success")
+    return redirect(url_for("admin.users_index"))
+
+
 @bp.route("/usuarios/<int:user_id>/invitacion-whatsapp", methods=["POST"])
 @require_perm("users.manage")
 def users_invitation_whatsapp(user_id: int):

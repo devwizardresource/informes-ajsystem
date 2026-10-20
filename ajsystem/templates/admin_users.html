@@ -7,7 +7,7 @@
   <h2>Usuarios</h2>
   <div class="table-wrap">
   <table class="table table-dense users-table">
-    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">N.º identificación</th><th scope="col">WhatsApp</th><th scope="col">Rol</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
+    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">N.º identificación</th><th scope="col">WhatsApp</th><th scope="col">Rol</th><th scope="col">Firma para informes</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
@@ -36,6 +36,17 @@
             <select id="rol-{{ u.id }}" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if r.code == u.role_code %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
             <button type="submit" class="btn btn-sm" data-confirm="¿Cambiar el rol de {{ u.username }}? Se cerrarán sus sesiones abiertas.">Aplicar</button>
           </form>
+        </td>
+        <td data-label="Firma para informes">
+          {% if u.role_code == 'TECNICO' %}
+          <p class="help">{{ 'Firma registrada' if u.has_signature else 'Sin firma' }}</p>
+          <form method="post" action="{{ url_for('admin.users_signature', user_id=u.id) }}" enctype="multipart/form-data" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label class="sr-only" for="firma-{{ u.id }}">Firma de {{ u.username }}</label>
+            <input id="firma-{{ u.id }}" name="firma" type="file" accept="image/jpeg,image/png,image/webp" required>
+            <button type="submit" class="btn btn-sm">{{ 'Reemplazar firma' if u.has_signature else 'Cargar firma' }}</button>
+          </form>
+          {% else %}—{% endif %}
         </td>
         <td data-label="Estado"><span class="status-pill {{ 'is-active' if u.is_active else 'is-inactive' }}">{{ 'Activo' if u.is_active else 'Inactivo' }}</span>{% if u.must_change_password %}<br><small class="muted">primer acceso pendiente</small>{% endif %}</td>
         <td data-label="Último acceso">{{ u.last_login_at|localdt }}</td>
