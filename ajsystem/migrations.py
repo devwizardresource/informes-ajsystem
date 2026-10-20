@@ -71,6 +71,33 @@ def _adapt(stmt: str, mariadb: bool) -> str:
     return stmt
 
 
+# Errores de «ya existe / ya no existe». El DDL confirma de forma implícita: si un arranque se
+# corta a mitad de una migración (p. ej. el proceso de Hostinger se reinicia), parte del esquema
+# queda creado sin registro en schema_migrations. Al reintentar, esas sentencias se omiten y se
+# continúa con las pendientes, en lugar de bloquear todos los arranques siguientes.
+_ALREADY_APPLIED = {
+    1050,  # la tabla ya existe
+    1060,  # columna duplicada
+    1061,  # índice duplicado
+    1091,  # no se puede eliminar: no existe
+    1359,  # el disparador ya existe
+    1826,  # restricción/clave foránea duplicada (MySQL)
+    4167,  # (MariaDB) la restricción ya existe
+}
+
+
+def _execute_resumable(cur, stmt: str, log) -> None:
+    import pymysql  # noqa: PLC0415
+
+    try:
+        cur.execute(stmt)
+    except pymysql.MySQLError as exc:
+        if not exc.args or exc.args[0] not in _ALREADY_APPLIED:
+            raise
+        first_line = stmt.strip().splitlines()[0][:100]
+        log(f"  ya aplicada antes (se omite): {first_line} [{exc.args[0]}]")
+
+
 def apply_migrations(conn, directory: Path = MIGRATIONS_DIR, log=print) -> list[str]:
     mariadb = _is_mariadb(conn)
     with conn.cursor() as cur:
@@ -95,7 +122,7 @@ def apply_migrations(conn, directory: Path = MIGRATIONS_DIR, log=print) -> list[
         log(f"Aplicando {path.name} ...")
         with conn.cursor() as cur:
             for stmt in split_statements(path.read_text(encoding="utf-8")):
-                cur.execute(_adapt(stmt, mariadb))
+                _execute_resumable(cur, _adapt(stmt, mariadb), log)
             cur.execute(
                 "INSERT INTO schema_migrations (version, filename, checksum, applied_at) VALUES (%s, %s, %s, UTC_TIMESTAMP(6))",
                 (version, path.name, checksum),

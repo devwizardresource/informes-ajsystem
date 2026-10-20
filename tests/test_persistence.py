@@ -137,3 +137,37 @@ def test_create_app_falla_con_plantilla_invalida(monkeypatch, overrides):
     from ajsystem.reports.schema import TemplateError
     with pytest.raises(TemplateError):
         create_app(overrides)
+
+
+def test_migracion_interrumpida_se_reanuda_sin_perder_datos(root_conn_factory, tmp_path):
+    """Un arranque cortado a mitad de una migración no debe bloquear los siguientes arranques."""
+    from ajsystem.migrations import apply_migrations
+
+    root = root_conn_factory(None)
+    with root.cursor() as cur:
+        cur.execute("DROP DATABASE IF EXISTS ajsys_test_resume")
+        cur.execute("CREATE DATABASE ajsys_test_resume CHARACTER SET utf8mb4")
+    root.close()
+    (tmp_path / "0001_base.sql").write_text(
+        "CREATE TABLE t (id INT PRIMARY KEY) ENGINE=InnoDB;\nINSERT INTO t VALUES (1);\n", encoding="utf-8")
+    (tmp_path / "0002_cambio.sql").write_text(
+        "ALTER TABLE t ADD COLUMN nota VARCHAR(20) NULL;\n"
+        "CREATE TABLE t2 (id INT PRIMARY KEY) ENGINE=InnoDB;\n"
+        "ALTER TABLE t ADD KEY ix_nota (nota);\n", encoding="utf-8")
+    conn = root_conn_factory("ajsys_test_resume")
+    try:
+        assert apply_migrations(conn, tmp_path, log=lambda *_: None) == ["0001_base.sql", "0002_cambio.sql"]
+        with conn.cursor() as cur:  # estado de un corte tras las dos primeras sentencias de 0002
+            cur.execute("DELETE FROM schema_migrations WHERE version = '0002'")
+            cur.execute("ALTER TABLE t DROP KEY ix_nota")
+        assert apply_migrations(conn, tmp_path, log=lambda *_: None) == ["0002_cambio.sql"]
+        with conn.cursor() as cur:
+            cur.execute("SHOW INDEX FROM t WHERE Key_name = 'ix_nota'")
+            assert cur.fetchall()
+            cur.execute("SELECT COUNT(*) AS n FROM t")
+            assert cur.fetchone()["n"] == 1
+        assert apply_migrations(conn, tmp_path, log=lambda *_: None) == []
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("DROP DATABASE IF EXISTS ajsys_test_resume")
+        conn.close()

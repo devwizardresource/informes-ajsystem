@@ -39,7 +39,7 @@ AJS_INITIAL_ADMIN_PASSWORD=<temporal; se cambia en el primer acceso>
 
    Genere los secretos con `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
 4. Despliegue. En el primer arranque se aplican las migraciones y se crea el responsable inicial (solo si no existe ninguno). Active el certificado SSL del dominio: la cookie de sesión exige HTTPS.
-5. Cada `git push` a `main` se vuelve a desplegar (si activa el despliegue automático); las migraciones nuevas se aplican al arrancar. **Haga un respaldo antes de publicar una migración.**
+5. Cada `git push` a `main` se vuelve a desplegar (si activa el despliegue automático); las migraciones nuevas se aplican al arrancar. **Haga un respaldo antes de publicar una migración.** Si un arranque se corta a mitad de una migración (reinicio del proceso en Hostinger), el siguiente arranque la reanuda: omite lo que ya quedó creado (columnas, tablas, índices) y aplica el resto, sin tocar los datos existentes.
 
 Variables opcionales: `AJS_AUTO_MIGRATE=0` (no migrar al arrancar), `AJS_DB_ADMIN_USER`/`AJS_DB_ADMIN_PASSWORD` (cuenta distinta para migrar), `AJS_PYTHON` (ruta del intérprete), `AJS_WORKERS`/`AJS_THREADS` (por defecto 2/4), `AJS_EDGE_PROXY_HOPS` (proxies de Hostinger delante de Node, por defecto 1).
 

@@ -22,7 +22,7 @@ from conftest import create_report, fill, new_op
 def test_cuenta_de_aplicacion_no_puede_alterar_historial(app_conn, sql):
     with app_conn.cursor() as cur, pytest.raises(pymysql.err.MySQLError) as exc:
         cur.execute(sql)
-    assert exc.value.args[0] in (1142, 1143, 1227, 1044, 1370)  # sin privilegio
+    assert exc.value.args[0] in (1142, 1143, 1227, 1044, 1370, 1419)  # sin privilegio (1419: MariaDB con binlog)
 
 
 def test_disparadores_bloquean_incluso_a_cuentas_privilegiadas(root_conn_factory, browser, make_user):

@@ -130,6 +130,28 @@ def test_firma_de_perfil_se_copia_al_informe_al_cerrar(browser, make_user, q):
     assert copied["sha256"] == signature["sha256"] and copied["created_by"] == t["id"]
 
 
+def test_responsable_carga_firma_del_tecnico_y_se_usa_al_cerrar(browser, make_user, q):
+    t, boss, admin_user = make_user("TECNICO"), make_user("JEFE"), make_user("RESPONSABLE")
+    admin = browser(admin_user)
+
+    def send(b, user_id):
+        return b.client.post(f"/administracion/usuarios/{user_id}/firma", data={
+            "csrf_token": b.csrf("/"),
+            "firma": (io.BytesIO(_jpeg()), "firma.jpg")}, content_type="multipart/form-data")
+
+    assert send(admin, t["id"]).status_code == 302
+    assert q("SELECT COUNT(*) AS n FROM user_signatures WHERE user_id = %s", (t["id"],))[0]["n"] == 1
+    # Solo cuentas de rol Técnico, y solo quien gestiona usuarios.
+    assert send(admin, boss["id"]).status_code == 302
+    assert q("SELECT COUNT(*) AS n FROM user_signatures WHERE user_id = %s", (boss["id"],))[0]["n"] == 0
+    assert send(browser(boss), t["id"]).status_code == 403
+    bt = browser(t)
+    rid = create_report(bt)
+    assert fill(bt, q, rid, accion="cerrar").status_code == 302
+    assert q("SELECT COUNT(*) AS n FROM report_attachments WHERE report_id = %s AND kind = 'FIRMA_ELABORA' "
+             "AND deleted_at IS NULL", (rid,))[0]["n"] == 1
+
+
 def test_firma_de_quien_recibe_solo_jefe_y_responsable(browser, make_user):
     t, boss = make_user("TECNICO"), make_user("JEFE")
     owner_browser = browser(t)
@@ -172,7 +194,7 @@ def test_registro_de_sesiones_solo_jefe_y_responsable(browser, make_user):
 
 # ---------------------------------------------------------------- fotos y autocompletado
 def test_foto_se_anexa_sin_metadatos_y_es_privada(browser, make_user, q):
-    t, otro = make_user("TECNICO"), make_user("TECNICO")
+    t = make_user("TECNICO")
     bt = browser(t)
     rid = create_report(bt)
     r = upload(bt, rid, _jpeg(exif_gps=True))
@@ -181,7 +203,9 @@ def test_foto_se_anexa_sin_metadatos_y_es_privada(browser, make_user, q):
     img = bt.get(f"/informes/{rid}/adjuntos/{pid}")
     assert img.status_code == 200 and img.mimetype == "image/jpeg"
     assert not Image.open(io.BytesIO(img.data)).getexif()  # sin EXIF ni GPS
-    assert browser(otro).get(f"/informes/{rid}/adjuntos/{pid}").status_code == 404
+    # Todos los perfiles ven todos los informes; sin sesión la foto no se entrega.
+    anon = browser().get(f"/informes/{rid}/adjuntos/{pid}")
+    assert anon.status_code in (302, 401, 404) and anon.mimetype != "image/jpeg"
     assert q("SELECT COUNT(*) AS n FROM audit_log WHERE event_type = 'ADJUNTO_AGREGADO' AND object_id = "
              "(SELECT code FROM reports WHERE id = %s)", (rid,))[0]["n"] == 1
 
