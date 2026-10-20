@@ -48,6 +48,8 @@ class Settings:
     mysqldump_bin: str
     mysql_bin: str
     backup_dir: str
+    # Socket Unix de MySQL (opcional). Vacío: TCP, con el socket local como alternativa.
+    db_socket: str = ""
     extra: dict = field(default_factory=dict)
 
     @property
@@ -85,6 +87,7 @@ def load_settings(overrides: dict | None = None) -> Settings:
         mysqldump_bin=os.environ.get("AJS_MYSQLDUMP_BIN", "mysqldump"),
         mysql_bin=os.environ.get("AJS_MYSQL_BIN", "mysql"),
         backup_dir=os.environ.get("AJS_BACKUP_DIR", "backups"),
+        db_socket=os.environ.get("AJS_DB_SOCKET", "").strip(),
     )
     if overrides:
         values.update(overrides)
