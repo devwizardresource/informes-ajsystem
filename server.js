@@ -111,19 +111,36 @@ function migrationUser() {
   return admin && process.env.AJS_DB_ADMIN_PASSWORD ? admin : process.env.AJS_DB_USER;
 }
 
+// Las salidas de la orden pasan por log() (redactadas): escritas directamente, Hostinger las
+// descarta y no quedaría constancia de qué migraciones se aplicaron.
+function forwardLines(stream, onLine) {
+  let pending = "";
+  stream.on("data", (chunk) => {
+    const lines = (pending + chunk.toString()).split("\n");
+    pending = lines.pop();
+    for (const line of lines) if (line.trim()) onLine(line);
+  });
+  stream.on("end", () => { if (pending.trim()) onLine(pending); });
+}
+
 function runFlask(py, args, { allowFail = false } = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(py, ["-m", "flask", "--app", "wsgi", ...args],
-      { cwd: ROOT, env: pythonEnv(), stdio: ["ignore", "inherit", "pipe"] });
+      { cwd: ROOT, env: pythonEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    const prefix = `flask ${args[0]}`;
+    const emit = (line) => log(`${prefix}: ${redact(line).slice(0, 2000)}`);
     let stderr = "";
-    p.stderr.on("data", (chunk) => {
-      process.stderr.write(chunk);
-      stderr = (stderr + chunk.toString()).slice(-20000);
+    forwardLines(p.stdout, emit);
+    forwardLines(p.stderr, (line) => {
+      emit(line);
+      stderr = (stderr + line + "\n").slice(-20000);
     });
     p.on("error", reject);
-    p.on("exit", (code) => {
+    p.on("close", (code, signal) => {
       if (code === 0 || allowFail) return resolve(code);
-      const err = new Error(`flask ${args[0]} terminó con código ${code}`);
+      const err = new Error(signal
+        ? `flask ${args[0]} fue interrumpido por la señal ${signal}`
+        : `flask ${args[0]} terminó con código ${code}`);
       err.hint = startupHint(stderr);
       reject(err);
     });
