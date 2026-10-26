@@ -19,7 +19,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
