@@ -3,7 +3,7 @@
 {% block content %}
 <div class="login-wrap">
   <section class="login">
-    <div class="login-head"><img src="{{ url_for('static', filename='img/logo-aj-system@2x.png') }}?v={{ app_version }}" alt="AJ System" width="157" height="64"></div>
+    <div class="login-head"><img src="{{ url_for('static', filename='img/logo-aj-system@2x.png') }}?v={{ static_version }}" alt="AJ System" width="157" height="64"></div>
     <h1>Iniciar sesión</h1>
     <form method="post" action="{{ url_for('auth.login') }}" data-busy>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

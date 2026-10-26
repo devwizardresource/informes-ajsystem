@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1020">
   <title>{% block title %}AJ System{% endblock %} · AJ System</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v={{ app_version }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon-192.png') }}?v={{ app_version }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v={{ static_version }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon-192.png') }}?v={{ static_version }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/ubuntu-sans-latin-400-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="{{ url_for('static', filename='fonts/ubuntu-sans-latin-700-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ app_version }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ static_version }}">
   {% block head %}{% endblock %}
-  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ app_version }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ static_version }}" defer></script>
 </head>
 <body>
 <a class="skip" href="#contenido">Saltar al contenido</a>
 <header class="topbar">
   <a class="brand" href="{{ url_for('home.index') if current_user else url_for('auth.login') }}">
-    <img src="{{ url_for('static', filename='img/logo-aj-system.png') }}?v={{ app_version }}"
-         srcset="{{ url_for('static', filename='img/logo-aj-system.png') }}?v={{ app_version }} 1x, {{ url_for('static', filename='img/logo-aj-system@2x.png') }}?v={{ app_version }} 2x"
+    <img src="{{ url_for('static', filename='img/logo-aj-system.png') }}?v={{ static_version }}"
+         srcset="{{ url_for('static', filename='img/logo-aj-system.png') }}?v={{ static_version }} 1x, {{ url_for('static', filename='img/logo-aj-system@2x.png') }}?v={{ static_version }} 2x"
          alt="AJ System" width="93" height="38">
     <span class="brand-sub">Auditoría técnica de hardware</span>
   </a>
