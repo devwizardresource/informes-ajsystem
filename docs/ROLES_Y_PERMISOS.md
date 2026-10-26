@@ -61,7 +61,7 @@ Las invitaciones de primer acceso se preparan en **Usuarios → Invitar por What
 
 ## Firma del Director en informes cerrados
 
-Al cerrarse, un informe aparece en **Inicio → Informes cerrados pendientes de mi firma**. El Director lo firma con la firma de **Mi perfil** («Firmar con mi firma de perfil») o dibujándola/cargándola en «Firma digital de quien recibe / aprueba». Solo esa firma se admite con el informe cerrado: el contenido, las fotos y la firma de quien elabora siguen bloqueados, también en la base de datos (disparadores de la migración 0007). Firmar no cambia la revisión ni la huella del informe; reemplazar la firma retira la anterior de forma lógica (queda en el historial) y todo queda en la auditoría (`ADJUNTO_AGREGADO`).
+Al cerrarse, un informe aparece en **Inicio → Informes cerrados pendientes de mi firma**. El Director lo firma con la firma guardada en **Mi perfil**: pulsa **Firmar** (la firma aparece en «Firma digital de quien recibe / aprueba», todavía sin guardar) y luego **Guardar cambios**. También puede dibujarla o cargar una imagen en ese recuadro. Solo esa firma se admite con el informe cerrado: el contenido, las fotos y la firma de quien elabora siguen bloqueados, también en la base de datos (disparadores de la migración 0007). Firmar no cambia la revisión ni la huella del informe; reemplazar la firma retira la anterior de forma lógica (queda en el historial) y todo queda en la auditoría (`ADJUNTO_AGREGADO`).
 
 ## Panel de actividad y tablero ejecutivo
 

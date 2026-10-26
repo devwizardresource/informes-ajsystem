@@ -5,7 +5,8 @@ import base64
 import datetime as dt
 from urllib.parse import urlsplit
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, url_for
+from flask import (Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request,
+                   url_for)
 
 from .. import audit, db, users
 from ..security import passwords, sessions
@@ -130,6 +131,17 @@ def profile():
     signature_data = ("data:" + signature["mime"] + ";base64," +
                       base64.b64encode(bytes(signature["content"])).decode("ascii")) if signature else None
     return render_template("profile.html", signature_data=signature_data)
+
+
+@bp.route("/cuenta/perfil/firma.png")
+@login_required
+def profile_signature_image():
+    """Firma guardada del propio usuario (nunca la de otro): la usa el botón «Firmar» del informe."""
+    signature = users.signature_for(g.user["id"])
+    if not signature:
+        abort(404)
+    return Response(bytes(signature["content"]), mimetype=signature["mime"],
+                    headers={"Cache-Control": "private, no-store"})
 
 
 @bp.route("/cuenta/perfil/firma", methods=["POST"])

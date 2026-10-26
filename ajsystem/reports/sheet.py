@@ -134,12 +134,14 @@ def _row(f: schema.Field, value, editable: bool, error: str | None, static: bool
 def render(template: schema.Template, values: dict, *, editable: bool, errors: dict | None = None,
            number: str = "", year: str = "", registro: dict | None = None, signatures: dict | None = None,
            logo_src: str | None = None, static: bool = False, can_receive_signature: bool = False,
-           profile_url: str | None = None, sign_closed: bool = False) -> str:
+           profile_url: str | None = None, sign_closed: bool = False,
+           profile_signature_url: str | None = None) -> str:
     """HTML de la hoja (<main class="sheet">) con los datos del informe.
 
     signatures: {"FIRMA_ELABORA": url_o_data_uri, ...}; logo_src: URL del logo (None = el de la plantilla);
     static: True para el PDF (sin controles de formulario); sign_closed: el Director puede firmar como
-    quien recibe aunque el informe esté cerrado (el resto de la hoja sigue bloqueado).
+    quien recibe aunque el informe esté cerrado (el resto de la hoja sigue bloqueado);
+    profile_signature_url: firma guardada del Director, que el botón «Firmar» coloca en el recuadro.
     """
     src = source()
     errors = errors or {}
@@ -202,9 +204,11 @@ def render(template: schema.Template, values: dict, *, editable: bool, errors: d
                     if kind == "FIRMA_ELABORA" and editable and not url and profile_url else "")
             return (f'<div class="sig readonly{" has" if url else ""}" data-kind="{kind}"><div class="pad">{img}</div>'
                     f'<div class="sig-cap">{caption}</div></div>{hint}')
+        profile_btn = (f'<button type="button" data-act="profile" data-src="{_attr(profile_signature_url)}">Firmar</button>'
+                       if sign_closed and profile_signature_url else "")
         return (f'<div class="sig{" has" if url else ""}" data-kind="{kind}"><div class="pad"><canvas></canvas>{img}'
                 f'<span class="ph">Firme aquí o cargue una imagen</span></div><div class="sig-cap">{caption}</div>'
-                '<div class="tools"><button type="button" data-act="save">Guardar firma</button>'
+                f'<div class="tools">{profile_btn}<button type="button" data-act="save">Guardar firma</button>'
                 '<button type="button" data-act="load">Cargar imagen</button>'
                 '<button type="button" data-act="clear">Borrar</button>'
                 '<input type="file" accept="image/*" hidden><span class="status" aria-live="polite"></span></div></div>')

@@ -305,6 +305,8 @@
     });
     sig.querySelector("[data-act=save]").addEventListener("click", function () {
       if (!pending) { state.textContent = "No hay una firma nueva que guardar"; return; }
+      var signForm = document.getElementById("sign-form");
+      if (pending === "profile" && signForm) { signForm.requestSubmit(); return; }
       state.textContent = "Guardando…";
       var blobPromise = pending === "canvas" ? toBlob(cv, "image/png") : Promise.resolve(pending);
       blobPromise.then(function (blob) {
@@ -314,6 +316,41 @@
         img.src = info.url; img.hidden = false; ctx.clearRect(0, 0, cv.width, cv.height);
       }).catch(function (err) { state.textContent = err.message; });
     });
+
+    // Director con el informe cerrado: «Firmar» coloca la firma guardada y «Guardar cambios» la registra.
+    var signForm = document.getElementById("sign-form");
+    if (sig.getAttribute("data-kind") !== "FIRMA_RECIBE" || !signForm) { fit(); window.addEventListener("resize", fit); return; }
+    var profileBtn = sig.querySelector("[data-act=profile]");
+    var saveBtns = document.querySelectorAll("[data-sign-save]");
+    function setReady(ready) { saveBtns.forEach(function (b) { b.disabled = !ready; }); }
+    function useProfile() {
+      if (!profileBtn) return;
+      ctx.clearRect(0, 0, cv.width, cv.height); file.value = "";
+      img.src = profileBtn.getAttribute("data-src"); img.hidden = false; sig.classList.add("has");
+      pending = "profile"; state.textContent = "Firma colocada: pulse «Guardar cambios»";
+      setReady(true);
+      signForm.dispatchEvent(new Event("change", { bubbles: true }));
+      sig.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    if (profileBtn) profileBtn.addEventListener("click", useProfile);
+    document.querySelectorAll("[data-sign-profile]").forEach(function (b) { b.addEventListener("click", useProfile); });
+    ["pointerdown"].forEach(function (t) { pad.addEventListener(t, function () { setReady(true); }); });
+    file.addEventListener("change", function () { if (file.files[0]) setReady(true); });
+    sig.querySelector("[data-act=clear]").addEventListener("click", function () { setReady(false); });
+    signForm.addEventListener("submit", function (e) {
+      if (pending === "profile" || !pending) return;  // el servidor copia la firma guardada del perfil
+      e.preventDefault();  // firma dibujada o cargada: se sube y se recarga el informe
+      state.textContent = "Guardando…";
+      (pending === "canvas" ? toBlob(cv, "image/png") : Promise.resolve(pending)).then(function (blob) {
+        return post(UPLOAD_URL, { tipo: "FIRMA_RECIBE", archivo: new File([blob], "firma.png", { type: blob.type || "image/png" }) });
+      }).then(function () { window.location.reload(); })
+        .catch(function (err) {
+          state.textContent = err.message; signForm.dataset.submitting = "";
+          saveBtns.forEach(function (b) { b.textContent = "Guardar cambios"; b.removeAttribute("aria-busy"); });
+          setReady(true);
+        });
+    });
+    setReady(false);
     fit(); window.addEventListener("resize", fit);
   });
 })();

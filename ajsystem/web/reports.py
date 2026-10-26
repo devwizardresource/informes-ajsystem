@@ -125,6 +125,8 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
         signatures=signatures, can_receive_signature=g.user["role_code"] in {"JEFE", "RESPONSABLE"},
         profile_url=url_for("auth.profile") if report["owner_id"] == g.user["id"] else None,
         sign_closed=caps["sign_closed"],
+        profile_signature_url=(url_for("auth.profile_signature_image")
+                               if caps["sign_closed"] and users.signature_for(g.user["id"]) else None),
         logo_src=url_for("static", filename="img/logo-aj-system@2x.png"))
     return render_template(
         "report_detail.html",

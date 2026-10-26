@@ -182,3 +182,25 @@ def test_metricas_ignoran_informes_eliminados(browser, make_user, q, app, app_co
         assert analytics.executive(today, today, t["id"], "UTC")["kpi"]["reports"] == 0
         assert analytics.activity_calendar(t["id"], "UTC")["total"] == 0
     assert json.loads(q("SELECT data FROM reports WHERE id = %s", (rid,))[0]["data"])  # el registro sigue ahí
+
+
+def test_boton_firmar_coloca_la_firma_guardada_y_guardar_cambios_la_registra(browser, make_user, q):
+    _t, _bt, rid = _closed_report(browser, make_user, q)
+    director = make_user("RESPONSABLE")
+    bd = browser(director)
+    assert bd.get("/cuenta/perfil/firma.png").status_code == 404  # aún sin firma guardada
+    _profile_signature(bd)
+    page = bd.get(f"/informes/{rid}").get_data(as_text=True)
+    assert 'data-act="profile" data-src="/cuenta/perfil/firma.png">Firmar</button>' in page
+    assert 'id="sign-form"' in page and 'data-sign-save>Guardar cambios</button>' in page
+    img = bd.get("/cuenta/perfil/firma.png")
+    assert img.status_code == 200 and img.mimetype == "image/png" and "no-store" in img.headers["Cache-Control"]
+    # «Guardar cambios» envía el formulario de firma: el servidor copia la firma guardada del Director.
+    assert bd.post(f"/informes/{rid}/firmar", csrf_from=f"/informes/{rid}").status_code == 302
+    saved = q("SELECT a.sha256 FROM report_attachments a WHERE a.report_id = %s AND a.kind = 'FIRMA_RECIBE' "
+              "AND a.deleted_at IS NULL", (rid,))[0]["sha256"]
+    assert saved == q("SELECT sha256 FROM user_signatures WHERE user_id = %s", (director["id"],))[0]["sha256"]
+    # Un técnico no ve el botón en un informe cerrado.
+    other = browser(make_user("TECNICO"))
+    _profile_signature(other)
+    assert 'data-act="profile"' not in other.get(f"/informes/{rid}").get_data(as_text=True)

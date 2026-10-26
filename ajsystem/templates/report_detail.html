@@ -27,6 +27,10 @@
   {% if caps.close %}<button type="submit" form="report-form" name="accion" value="cerrar" class="warn"
       data-confirm="¿Cerrar y registrar el informe {{ report.code }}? Quedará bloqueado; cualquier usuario podrá reabrirlo después indicando el motivo.">Cerrar informe</button>{% endif %}
   {% endif %}
+  {% if caps.sign_closed and has_profile_signature %}
+  <button type="button" data-sign-profile>Firmar</button>
+  <button type="submit" form="sign-form" data-sign-save>Guardar cambios</button>
+  {% endif %}
   <button type="button" class="ghost" data-print>Imprimir / Guardar como PDF</button>
   {% if editable %}<button type="button" class="ghost" data-clear-form>Limpiar formulario</button>{% endif %}
   {% if caps.download %}
@@ -54,7 +58,7 @@
 {% if report.status_code in ('CERRADO', 'ENVIADO') %}
 <p class="notice">Informe cerrado: el contenido está bloqueado.{% if caps.reopen %} Use «Reabrir para editar» e indique el motivo; no requiere aprobación.{% elif caps.request_reopen %} Para corregirlo, solicite permiso al jefe o al Director (abajo).{% endif %}</p>
 {% if caps.sign_closed %}
-<form class="panel director-sign" method="post" action="{{ url_for('reports.sign_closed', report_id=report.id) }}" data-busy>
+<form class="panel director-sign" id="sign-form" method="post" action="{{ url_for('reports.sign_closed', report_id=report.id) }}" data-busy data-dirty-guard>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>Firma del Director</h2>
   {% if receive_signature %}
@@ -64,12 +68,13 @@
   {% endif %}
   <div class="actions">
     {% if has_profile_signature %}
-    <button type="submit" class="btn" data-confirm="¿Firmar el informe {{ report.code }} con la firma de su perfil?">Firmar con mi firma de perfil</button>
+    <button type="button" class="btn" data-sign-profile>Firmar</button>
+    <button type="submit" class="btn" data-sign-save>Guardar cambios</button>
     {% else %}
     <a class="btn secondary" href="{{ url_for('auth.profile') }}">Cargar mi firma en Mi perfil</a>
     {% endif %}
   </div>
-  <p class="small muted">También puede dibujarla o cargar una imagen en «Firma digital de quien recibe / aprueba», en la hoja, y pulsar «Guardar firma».</p>
+  <p class="small muted">{% if has_profile_signature %}Pulse <b>Firmar</b> para colocar su firma guardada en «Firma digital de quien recibe / aprueba» y luego <b>Guardar cambios</b>. {% endif %}También puede dibujarla o cargar una imagen en la hoja.</p>
 </form>
 {% endif %}
 {% elif editable %}
