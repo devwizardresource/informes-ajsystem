@@ -25,7 +25,7 @@ SOURCE = Path(__file__).resolve().parent.parent.parent / "resources" / "Plantill
 # Filas del formato que no están en la plantilla original: campo → etiqueta tras la que se insertan.
 EXTRA_ROWS_AFTER = {
     "marca": "Dispositivo:",
-    "observaciones_habilitadas": "Normas medioambientales:",
+    "observaciones_habilitadas": "Fuente de poder:",
     "observaciones": "Incluir observaciones adicionales:",
 }
 

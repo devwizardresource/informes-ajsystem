@@ -13,6 +13,10 @@ La plantilla oficial es **el archivo del propietario `resources/Plantilla_Inform
 Si el propietario modifica el archivo (textos, colores, orden de filas), la pantalla y el PDF siguen el cambio sin tocar código. Si añade o renombra una fila, hay que reflejarlo en `aj_v1.json`.
 
 Diferencias con la referencia, intencionadas:
+- **«FORMATO DE INFORME DE HARDWARE»** (2026-10-26): la fila del disco se llama **«Estado DD»**; se retiraron «Ventiladores», «Temperatura de operación» y los informes 3 (seguridad y control de acceso) y 4 (cumplimiento y estandarización). «Incluir observaciones adicionales» y «Observaciones adicionales» siguen, ahora al final de la sección 2.
+  - «Estado DD» conserva el identificador `disco`, así que los informes ya diligenciados muestran su valor sin migrar nada.
+  - Los valores de las filas retiradas (`ventiladores`, `temperatura`, `climatizacion`, `control_acceso`, `contra_incendios`, `respaldo_electrico`, `config_minimas`, `parches_firmware`, `politicas_reemplazo`, `normas_seguridad`, `normas_ambientales`) **no se borran**: quedan en el JSON del informe y en `report_versions` (la huella SHA-256 de los informes cerrados no cambia) y se mantienen al volver a guardar. Solo dejan de mostrarse en la hoja y el PDF.
+  - Firmas, fotos, registro y trazabilidad no dependen de las filas, y no cambian.
 - Se añadió la fila **«Marca»** en la sección 1: los equipos se indexan y ordenan por marca y número de serie (Consolidación → «Ordenar por: Marca y número de serie»).
 - El número del informe sale del identificador (`AJ-2026-000123` → «Informe N.º 00123 de 2026»).
 - El bloque «Registro de quien realizó el informe» se rellena con el autor (usuario, nombre y N.º de identificación) y las firmas se dibujan o cargan en la propia hoja.

@@ -61,7 +61,8 @@ EXTRA_HEADERS: dict[str, tuple[str, ...]] = {
     "control_acceso": ("control de acceso a los centros de datos", "control de acceso"),
     "contra_incendios": ("sistema contra incendios", "contra incendios"),
     "respaldo_electrico": ("respaldo electrico", "ups"),
-    "disco": ("diagnostico de desgaste / vida util estimada del disco duro", "diagnostico del disco"),
+    "disco": ("estado dd", "estado del disco duro", "diagnostico de desgaste / vida util estimada del disco duro",
+              "diagnostico del disco"),
     "ram": ("estado de memoria ram",),
     "temperatura": ("temperatura de operacion",),
 }

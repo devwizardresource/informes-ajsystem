@@ -115,6 +115,32 @@ def test_observaciones_solo_se_muestran_al_seleccionarlas():
     assert "Medidas de protección contra robos" not in shown
 
 
+def test_formato_de_hardware_conserva_datos_de_filas_retiradas(browser, make_user, q, app_conn):
+    """«Estado DD» usa el mismo campo que el antiguo diagnóstico del disco; las filas retiradas
+    (ventiladores, temperatura, informes 3 y 4) dejan de mostrarse pero sus datos no se borran."""
+    import json
+    b = browser(make_user("TECNICO"))
+    rid = create_report(b)
+    assert fill(b, q, rid, disco="SSD 512 GB; salud 97 %", observaciones_habilitadas="1",
+                observaciones="Equipo con golpe en la tapa").status_code == 302
+    legacy = {"ventiladores": "Operativo", "temperatura": "54 °C", "climatizacion": "Aire central",
+              "normas_ambientales": "RAEE"}
+    data = json.loads(q("SELECT data FROM reports WHERE id = %s", (rid,))[0]["data"])
+    with app_conn.cursor() as cur:
+        cur.execute("UPDATE reports SET data = %s WHERE id = %s", (json.dumps({**data, **legacy}), rid))
+    page = b.get(f"/informes/{rid}").get_data(as_text=True)
+    assert "FORMATO DE INFORME DE HARDWARE" in page and "Estado DD:" in page and "SSD 512 GB; salud 97 %" in page
+    assert "Equipo con golpe en la tapa" in page
+    for gone in ("Ventiladores:", "Temperatura de operación:", "INFORME DE SEGURIDAD", "INFORME DE CUMPLIMIENTO",
+                 "Diagnóstico de desgaste"):
+        assert gone not in page
+    assert fill(b, q, rid, disco="SSD 512 GB; salud 95 %", observaciones_habilitadas="1",
+                observaciones="Equipo con golpe en la tapa").status_code == 302
+    saved = json.loads(q("SELECT data FROM reports WHERE id = %s", (rid,))[0]["data"])
+    assert saved["disco"] == "SSD 512 GB; salud 95 %" and saved["observaciones"] == "Equipo con golpe en la tapa"
+    assert all(saved[k] == v for k, v in legacy.items())
+
+
 def test_firma_de_perfil_se_copia_al_informe_al_cerrar(browser, make_user, q):
     t = make_user("TECNICO")
     b = browser(t)
@@ -240,7 +266,8 @@ def test_autocompletar_desde_texto_de_foto(browser, make_user):
 @pytest.mark.parametrize("texto,esperado", [
     ("S/N: MXL8341ABC\nModel No.: TPC-F112-SF\nHP ProDesk 600 G4", {"numero_serie": "MXL8341ABC", "marca": "HP"}),
     ("Hardware Vendor: Lenovo\nHardware Model: ThinkSystem SR630", {"marca": "Lenovo", "dispositivo": "Servidor"}),
-    ("Temperatura CPU 54 °C\nCPU Fan 2350 RPM", {"temperatura": "54 °C", "ventiladores": "Operativo · 2350 RPM"}),
+    # Ventiladores y temperatura ya no son campos del formato: no se sugieren ni contaminan otras filas.
+    ("Temperatura CPU 54 °C\nCPU Fan 2350 RPM", {"temperatura": None, "ventiladores": None, "procesadores": None}),
 ])
 def test_extractor_de_texto(texto, esperado):
     out = extract.from_text(texto, schema.load_template("aj_v1"))

@@ -5,7 +5,7 @@ Sistema web para crear, cerrar, enviar, reabrir y consolidar informes de auditor
 - **Backend:** Python 3.12 + Flask 3.1 (WSGI, gunicorn)
 - **Base de datos:** MySQL 8.4 LTS o MariaDB 10.6+ (Hostinger); PyMySQL, SQL parametrizado, migraciones versionadas
 - **Frontend:** HTML (Jinja2), CSS y JavaScript sin CDN; fuente Ubuntu Sans y logo AJ System alojados localmente; adaptable a móviles
-- **Informe:** «Formato de Informe AJ System» idéntico a la plantilla de referencia, con fotos anexas por equipo y **autocompletado** desde una foto (OCR en el navegador con Tesseract.js) o desde una matriz Excel/CSV
+- **Informe:** «FORMATO DE INFORME DE HARDWARE» según la plantilla de `resources/`, con fotos anexas por equipo y **autocompletado** desde una foto (OCR en el navegador con Tesseract.js) o desde una matriz Excel/CSV
 - **PDF:** WeasyPrint (HTML → PDF en el servidor), una hoja + anexo fotográfico
 - **Despliegue:** GitHub → Hostinger (adaptador Node.js sin dependencias, dependencias Python verificadas por hash)
 
