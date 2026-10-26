@@ -1,7 +1,6 @@
 """AJ System — fábrica de la aplicación Flask."""
 from __future__ import annotations
 
-import hashlib
 import html
 import logging
 import os
@@ -20,7 +19,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.3.1"
+__version__ = "1.3.0"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
@@ -80,14 +79,6 @@ def create_app(overrides: dict | None = None) -> Flask:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     db.init_app(app)
     tz = ZoneInfo(settings.timezone)
-    # Los estáticos se guardan en caché un año («immutable»): la versión de la URL es la huella de su
-    # contenido, así cualquier cambio de CSS/JS/imágenes obliga al navegador a descargarlo de nuevo.
-    static_root = Path(app.static_folder)
-    digest = hashlib.sha256(__version__.encode())
-    for path in sorted(p for p in static_root.rglob("*") if p.is_file() and "vendor" not in p.parts):
-        digest.update(path.relative_to(static_root).as_posix().encode())
-        digest.update(path.read_bytes())
-    static_version = digest.hexdigest()[:12]
 
     from .web import admin, auth, consolidation, dashboard, home, logs, reports  # noqa: PLC0415
     for bp in (auth.bp, home.bp, reports.bp, consolidation.bp, logs.bp, admin.bp, dashboard.bp):
@@ -142,7 +133,6 @@ def create_app(overrides: dict | None = None) -> Flask:
             "has_perm": has_perm,
             "STATUS_LABELS": STATUS_LABELS,
             "app_version": __version__,
-            "static_version": static_version,
         }
 
     @app.template_filter("localdt")

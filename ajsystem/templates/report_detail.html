@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1020">
 <title>FORMATO DE INFORME DE HARDWARE – AJ System · {{ report.code }}</title>
-<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v={{ static_version }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v={{ app_version }}">
 {# Estilos de la plantilla del propietario (resources/Plantilla_Informe_AJ_System.html), sin modificar #}
 <link rel="stylesheet" href="{{ url_for('reports.template_css') }}?v={{ sheet_css_version }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/sheet.css') }}?v={{ static_version }}">
-<script src="{{ url_for('static', filename='js/app.js') }}?v={{ static_version }}" defer></script>
-{% if caps.edit or caps.sign_closed %}<script src="{{ url_for('static', filename='js/report.js') }}?v={{ static_version }}" defer></script>{% endif %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/sheet.css') }}?v={{ app_version }}">
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ app_version }}" defer></script>
+{% if caps.edit or caps.sign_closed %}<script src="{{ url_for('static', filename='js/report.js') }}?v={{ app_version }}" defer></script>{% endif %}
 </head>
 <body>
 {% from "_macros.html" import status_badge with context %}
