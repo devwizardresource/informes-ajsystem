@@ -7,7 +7,7 @@
   <a href="{{ url_for('logs.index') }}">Eventos</a>
   <a href="{{ url_for('logs.sessions') }}" aria-current="page">Entradas y salidas de sesión</a>
 </nav>
-<p class="muted small">Quién entró y salió del sistema, cuándo, desde qué IP y con qué sistema operativo. Solo visible para el responsable administrativo y el jefe. La IP es la observada por el servidor; el sistema operativo es el que informa el navegador.</p>
+<p class="muted small">Quién entró y salió del sistema, cuándo, desde qué IP y con qué sistema operativo. Solo visible para el Director y el jefe. La IP es la observada por el servidor; el sistema operativo es el que informa el navegador.</p>
 
 <form class="card filters" method="get" action="{{ url_for('logs.sessions') }}">
   <div><label for="usuario">Usuario o identificación</label><input id="usuario" name="usuario" value="{{ f.usuario }}" maxlength="64"></div>

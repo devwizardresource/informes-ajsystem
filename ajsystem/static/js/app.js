@@ -98,6 +98,63 @@
     });
   });
 
+  // Gráficas: información emergente para cualquier marca con data-tip (texto plano, nunca HTML)
+  var tip = null;
+  function showTip(target, x, y) {
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "chart-tip";
+      tip.setAttribute("role", "tooltip");
+      document.body.appendChild(tip);
+    }
+    tip.textContent = target.getAttribute("data-tip");
+    tip.hidden = false;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.min(Math.max(8, x - w / 2), window.innerWidth - w - 8);
+    var top = y - h - 12 < 8 ? y + 18 : y - h - 12;
+    tip.style.left = (left + window.scrollX) + "px";
+    tip.style.top = (top + window.scrollY) + "px";
+  }
+  function hideTip() { if (tip) tip.hidden = true; }
+  document.addEventListener("pointerover", function (e) {
+    var target = e.target.closest && e.target.closest("[data-tip]");
+    if (target) showTip(target, e.clientX, e.clientY); else hideTip();
+  });
+  document.addEventListener("pointermove", function (e) {
+    var target = e.target.closest && e.target.closest("[data-tip]");
+    if (target && tip && !tip.hidden) showTip(target, e.clientX, e.clientY);
+  });
+  document.addEventListener("scroll", hideTip, { passive: true });
+
+  // Calendarios anchos: en pantallas pequeñas se muestran desde la fecha más reciente
+  document.querySelectorAll("[data-scroll-end]").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
+
+  // Tablas ordenables: clic en el encabezado (data-sort="num" usa data-v de la celda)
+  document.querySelectorAll("table[data-sortable]").forEach(function (table) {
+    table.querySelectorAll("th[data-sort]").forEach(function (th, index) {
+      th.tabIndex = 0;
+      th.setAttribute("aria-sort", "none");
+      function sort() {
+        var asc = th.getAttribute("aria-sort") !== "ascending";
+        var numeric = th.getAttribute("data-sort") === "num";
+        var body = table.tBodies[0];
+        var rows = Array.prototype.slice.call(body.rows).filter(function (r) { return r.cells.length > index; });
+        rows.sort(function (a, b) {
+          var ca = a.cells[index], cb = b.cells[index];
+          var va = numeric ? parseFloat(ca.getAttribute("data-v") || ca.textContent) : ca.textContent.trim().toLowerCase();
+          var vb = numeric ? parseFloat(cb.getAttribute("data-v") || cb.textContent) : cb.textContent.trim().toLowerCase();
+          if (numeric) { va = isNaN(va) ? -Infinity : va; vb = isNaN(vb) ? -Infinity : vb; }
+          return (va > vb ? 1 : va < vb ? -1 : 0) * (asc ? 1 : -1);
+        });
+        rows.forEach(function (r) { body.appendChild(r); });
+        table.querySelectorAll("th[data-sort]").forEach(function (o) { o.setAttribute("aria-sort", "none"); });
+        th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      }
+      th.addEventListener("click", sort);
+      th.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sort(); } });
+    });
+  });
+
   // Si el navegador restaura la página desde caché (botón Atrás), se reactivan los formularios
   window.addEventListener("pageshow", function (e) {
     if (!e.persisted) return;

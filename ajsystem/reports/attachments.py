@@ -20,6 +20,7 @@ from . import service
 
 KINDS = {"FOTO", "FIRMA_ELABORA", "FIRMA_RECIBE"}
 SIGNATURES = {"FIRMA_ELABORA", "FIRMA_RECIBE"}
+RECEIVE_SIGNERS = {"JEFE", "RESPONSABLE"}  # firma de quien recibe con el informe abierto
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024     # lo que se acepta del navegador
 MAX_STORED_BYTES = 8 * 1024 * 1024      # lo que se guarda tras recodificar
 MAX_PIXELS = 50_000_000
@@ -80,20 +81,51 @@ def add(report_id: int, user: dict, kind: str, raw: bytes, original_name: str = 
         raise AttachmentError("Tipo de adjunto no válido.", status=400)
     if kind == "FIRMA_ELABORA":
         raise AttachmentError("La firma de quien elabora se administra desde Mi perfil.", status=403)
-    if kind == "FIRMA_RECIBE" and user.get("role_code") not in {"JEFE", "RESPONSABLE"}:
-        raise AttachmentError("Solo el jefe o el responsable pueden registrar la firma de quien recibe.", status=403)
+    if kind == "FIRMA_RECIBE" and not _may_sign_receive(user):
+        raise AttachmentError("Solo el jefe o el Director pueden registrar la firma de quien recibe.", status=403)
     if not raw:
         raise AttachmentError("No se recibió ninguna imagen.", status=400)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise AttachmentError("La imagen supera el tamaño máximo (15 MB).", status=413)
     content, mime, width, height, thumb = _reencode(raw, kind)
+    return _insert(report_id, user, kind, content, mime, width, height, thumb, original_name)
+
+
+def _may_sign_receive(user: dict) -> bool:
+    return user.get("role_code") in RECEIVE_SIGNERS or "report.sign_closed" in user.get("permissions", ())
+
+
+def _check_writable(report: dict, user: dict, kind: str) -> None:
+    caps = service.capabilities(report, user)
+    if caps["edit"] or (kind == "FIRMA_RECIBE" and caps["sign_closed"]):
+        return
+    raise AttachmentError("El informe está cerrado o no tiene permiso para modificarlo.", status=403,
+                          code="bloqueado")
+
+
+def sign_with_profile(report_id: int, user: dict) -> dict:
+    """El Director firma un informe cerrado o enviado con la firma guardada en su perfil."""
+    if "report.sign_closed" not in user.get("permissions", ()):
+        raise AttachmentError("Solo el Director puede firmar los informes cerrados.", status=403)
+    signature = db.query_one("SELECT mime, width, height, content FROM user_signatures WHERE user_id = %s",
+                             (user["id"],))
+    if not signature:
+        raise AttachmentError("Cargue primero su firma en Mi perfil.", status=409, code="sin_firma")
+    content = bytes(signature["content"])
+    return _insert(report_id, user, "FIRMA_RECIBE", content, signature["mime"], signature["width"],
+                   signature["height"], None, "firma de perfil", require_closed=True)
+
+
+def _insert(report_id: int, user: dict, kind: str, content: bytes, mime: str, width: int, height: int,
+            thumb: bytes | None, original_name: str, require_closed: bool = False) -> dict:
     digest = hashlib.sha256(content).hexdigest()
     public_id = uuid.uuid4().hex
     with db.transaction() as cur:
         report = service._lock_visible(cur, report_id, user)
-        if not service.capabilities(report, user)["edit"]:
-            raise AttachmentError("El informe está cerrado o no tiene permiso para modificarlo.", status=403,
-                                  code="bloqueado")
+        if require_closed and report["status_code"] not in service.CLOSED:
+            raise AttachmentError("El informe debe estar cerrado para firmarlo como Director.", status=409,
+                                  code="abierto")
+        _check_writable(report, user, kind)
         now = db.utcnow()
         replaced = None
         if kind in SIGNATURES:  # una sola firma vigente por tipo
@@ -124,9 +156,6 @@ def add(report_id: int, user: dict, kind: str, raw: bytes, original_name: str = 
 def remove(report_id: int, user: dict, public_id: str) -> None:
     with db.transaction() as cur:
         report = service._lock_visible(cur, report_id, user)
-        if not service.capabilities(report, user)["edit"]:
-            raise AttachmentError("El informe está cerrado o no tiene permiso para modificarlo.", status=403,
-                                  code="bloqueado")
         cur.execute("SELECT kind FROM report_attachments WHERE report_id = %s AND public_id = %s AND deleted_at IS NULL",
                     (report_id, public_id))
         attachment = cur.fetchone()
@@ -134,8 +163,9 @@ def remove(report_id: int, user: dict, public_id: str) -> None:
             raise service.ReportNotFound()
         if attachment["kind"] == "FIRMA_ELABORA":
             raise AttachmentError("La firma de quien elabora se administra desde Mi perfil.", status=403)
-        if attachment["kind"] == "FIRMA_RECIBE" and user.get("role_code") not in {"JEFE", "RESPONSABLE"}:
-            raise AttachmentError("Solo el jefe o el responsable pueden retirar la firma de quien recibe.", status=403)
+        if attachment["kind"] == "FIRMA_RECIBE" and not _may_sign_receive(user):
+            raise AttachmentError("Solo el jefe o el Director pueden retirar la firma de quien recibe.", status=403)
+        _check_writable(report, user, attachment["kind"])
         cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s "
                     "WHERE report_id = %s AND public_id = %s AND deleted_at IS NULL",
                     (db.utcnow(), user["id"], report_id, public_id))

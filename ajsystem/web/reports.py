@@ -124,12 +124,15 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
                   "identificacion": report.get("owner_id_number")},
         signatures=signatures, can_receive_signature=g.user["role_code"] in {"JEFE", "RESPONSABLE"},
         profile_url=url_for("auth.profile") if report["owner_id"] == g.user["id"] else None,
+        sign_closed=caps["sign_closed"],
         logo_src=url_for("static", filename="img/logo-aj-system@2x.png"))
     return render_template(
         "report_detail.html",
         report=report, template=template, caps=caps, pending=pending, sheet_html=sheet_html,
         sheet_css_version=sheet.source().css_hash,
         photos=[a for a in files if a["kind"] == "FOTO"],
+        receive_signature=next((a for a in files if a["kind"] == "FIRMA_RECIBE"), None),
+        has_profile_signature=caps["sign_closed"] and users.signature_for(g.user["id"]) is not None,
         history=service.history(report["id"]),
         versions=service.versions(report["id"]),
     ), status
@@ -247,7 +250,7 @@ def send(report_id: int):
     except service.ReportError as exc:
         return _reject(exc, report_id, "enviar")
     flash("El envío ya se había registrado." if result["already"]
-          else "Informe enviado. Ya está disponible para el responsable administrativo y el jefe.", "success")
+          else "Informe enviado. Ya está disponible para el Director y el jefe.", "success")
     return redirect(url_for("reports.detail", report_id=report_id))
 
 
@@ -273,7 +276,7 @@ def request_reopen(report_id: int):
     except service.ReportError as exc:
         return _reject(exc, report_id, "solicitar reapertura")
     flash("La solicitud ya se había registrado." if result["already"]
-          else "Solicitud enviada. El jefe o el responsable administrativo decidirán si se habilita la edición.",
+          else "Solicitud enviada. El jefe o el Director decidirán si se habilita la edición.",
           "success")
     return redirect(url_for("reports.detail", report_id=report_id))
 
@@ -311,6 +314,18 @@ def attachment_add(report_id: int):
     info["url"] = url_for("reports.attachment_get", report_id=report_id, public_id=info["id"])
     info["thumb"] = url_for("reports.attachment_get", report_id=report_id, public_id=info["id"], mini=1)
     return jsonify(info), 201
+
+
+@bp.route("/<int:report_id>/firmar", methods=["POST"])
+@require_perm("report.sign_closed")
+def sign_closed(report_id: int):
+    """El Director firma el informe cerrado con la firma de su perfil (como quien recibe / aprueba)."""
+    try:
+        attachments.sign_with_profile(report_id, g.user)
+    except service.ReportError as exc:
+        return _reject(exc, report_id, "firmar como Director")
+    flash("Informe firmado como Director.", "success")
+    return redirect(url_for("reports.detail", report_id=report_id))
 
 
 @bp.route("/<int:report_id>/adjuntos/<public_id>")

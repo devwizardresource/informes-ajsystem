@@ -27,7 +27,7 @@
 
 ## Limitaciones actuales
 
-- No hay recuperación de contraseña por correo (exigiría un servicio externo): la restablece el responsable administrativo.
+- No hay recuperación de contraseña por correo (exigiría un servicio externo): la restablece el Director.
 - No hay autenticación de dos factores.
 - No existe un estado formal de «revisado» o «aprobado» de los informes.
 - Los adjuntos (fotos, archivos) no están contemplados.

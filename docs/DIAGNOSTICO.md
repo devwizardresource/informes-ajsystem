@@ -24,7 +24,7 @@
 
 - **Alojamiento incompatible** con Python y MySQL. Es una decisión del propietario: ver [DESPLIEGUE.md](DESPLIEGUE.md). No se migró nada.
 - **Plantilla oficial no disponible**: los campos de auditoría y el diseño del PDF son provisionales.
-- **El nombre visible del perfil «responsable administrativo» está pendiente**: es configurable sin tocar el código (`set-role-name`).
+- El perfil RESPONSABLE se muestra como **«Director»** desde la migración 0007; sigue siendo configurable sin tocar el código (`set-role-name`).
 
 ## Dependencias pendientes de verificar en el alojamiento definitivo
 

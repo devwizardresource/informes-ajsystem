@@ -5,7 +5,7 @@ import pymysql
 
 from flask import Blueprint, current_app, g, render_template
 
-from .. import db
+from .. import analytics, db
 from ..reports import service
 from ..security.authz import has_perm, require_perm
 
@@ -31,6 +31,11 @@ def index():
                 in_correction=service.in_correction(user),
                 requests=service.pending_requests(user),
             )
+        if has_perm("home.activity"):
+            # Solo la actividad propia: el filtro es el usuario de la sesión, nunca un parámetro.
+            ctx["activity"] = analytics.activity_calendar(user["id"], current_app.config["AJS_SETTINGS"].timezone)
+        if has_perm("report.sign_closed"):
+            ctx["to_sign"], ctx["to_sign_total"] = analytics.pending_signature()
         if has_perm("audit.read"):
             ctx["recent_logins"] = db.query_all(
                 """SELECT s.created_at, s.ended_at, s.ip, u.full_name FROM sessions s JOIN users u ON u.id = s.user_id

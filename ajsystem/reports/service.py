@@ -85,6 +85,8 @@ def capabilities(report: dict, user: dict, pending_request: dict | None = None) 
         "resolve_request": "report.reopen" in perms and pending_request is not None and status in CLOSED,
         "download": "report.download" in perms,
         "delete": "report.delete" in perms,
+        # El Director firma como quien recibe / aprueba cuando el informe ya está cerrado o enviado.
+        "sign_closed": "report.sign_closed" in perms and status in CLOSED,
     }
 
 
@@ -459,7 +461,7 @@ def delete(report_id: int, user: dict, reason: str, idem_key: str | None) -> dic
     """
     _check_idem(idem_key)
     if "report.delete" not in user["permissions"]:
-        raise ReportError("Solo el responsable administrativo puede eliminar informes.", status=403)
+        raise ReportError("Solo el Director puede eliminar informes.", status=403)
     reason = _check_reason(reason)
     with db.transaction() as cur:
         report = _lock_visible(cur, report_id, user)
@@ -471,7 +473,7 @@ def delete(report_id: int, user: dict, reason: str, idem_key: str | None) -> dic
         # Una solicitud de reapertura pendiente deja de tener sentido.
         cur.execute("UPDATE reopen_requests SET status = 'RECHAZADA', resolved_by = %s, resolved_at = %s, "
                     "resolution_note = %s WHERE report_id = %s AND status = 'PENDIENTE'",
-                    (user["id"], now, "Informe eliminado por el responsable administrativo.", report_id))
+                    (user["id"], now, "Informe eliminado por el Director.", report_id))
         audit.write(cur, audit.REPORT_DELETED, "EXITO", object_type="informe", object_id=report["code"],
                     detail={"informe_id": report_id, "estado": report["status_code"], "motivo": reason,
                             "titulo": report["title"], "marca": report.get("equipment_brand"),
@@ -481,7 +483,7 @@ def delete(report_id: int, user: dict, reason: str, idem_key: str | None) -> dic
 
 def restore(report_id: int, user: dict) -> dict:
     if "report.delete" not in user["permissions"]:
-        raise ReportError("Solo el responsable administrativo puede restaurar informes.", status=403)
+        raise ReportError("Solo el Director puede restaurar informes.", status=403)
     with db.transaction() as cur:
         cur.execute("SELECT id, code FROM reports WHERE id = %s AND deleted_at IS NOT NULL FOR UPDATE", (report_id,))
         row = cur.fetchone()

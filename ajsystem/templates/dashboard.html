@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% from "_charts.html" import day_columns, hbars, donut, heat_legend %}
+{% block title %}Tablero ejecutivo{% endblock %}
+{% block content %}
+{% set k = d.kpi %}
+<div class="exec">
+  <section class="hero exec-hero">
+    <h1>Tablero ejecutivo</h1>
+    <p>Rendimiento de los técnicos e inventario auditado · informes creados del <b>{{ date_from.strftime('%d/%m/%Y') }}</b> al <b>{{ date_to.strftime('%d/%m/%Y') }}</b> ({{ d.days }} día{{ '' if d.days == 1 else 's' }}){% if owner_id %} · técnico: <b>{{ (owners|selectattr('id', 'equalto', owner_id)|first).full_name }}</b>{% endif %}</p>
+  </section>
+
+  <form class="card exec-filters" method="get" action="{{ url_for('dashboard.index') }}">
+    <div class="presets" role="group" aria-label="Rango rápido">
+      {% for key, label in (('7', '7 días'), ('30', '30 días'), ('90', '90 días'), ('365', '12 meses')) %}
+      <a class="btn btn-sm {{ 'btn-primary' if preset == key else 'btn-ghost' }}" href="{{ url_for('dashboard.index', rango=key, tecnico=owner_id or None) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <div class="filters">
+      <div><label for="f-desde">Desde</label><input id="f-desde" type="date" name="desde" value="{{ date_from.isoformat() }}" required></div>
+      <div><label for="f-hasta">Hasta</label><input id="f-hasta" type="date" name="hasta" value="{{ date_to.isoformat() }}" required></div>
+      <div><label for="f-tec">Técnico</label>
+        <select id="f-tec" name="tecnico"><option value="">Todos</option>
+          {% for o in owners %}<option value="{{ o.id }}" {% if o.id == owner_id %}selected{% endif %}>{{ o.full_name }}</option>{% endfor %}
+        </select></div>
+      <div class="filter-actions"><button type="submit" class="btn btn-primary">Aplicar</button><a class="btn btn-ghost" href="{{ url_for('dashboard.index') }}">Limpiar</a></div>
+    </div>
+  </form>
+
+  {% if notice %}<div class="notice notice-info" role="status">{{ notice }}</div>{% endif %}
+  {% if d.truncated %}<div class="notice" role="status">El periodo tiene más informes de los que se analizan a la vez; acote las fechas para ver cifras completas.</div>{% endif %}
+
+  <section aria-labelledby="kpi-t">
+    <h2 id="kpi-t" class="sr-only">Indicadores clave</h2>
+    <div class="kpis">
+      <div class="kpi"><span class="kpi-n">{{ k.reports }}</span><span class="kpi-l">Informes realizados</span><small>{{ k.closed }} cerrados o enviados · {{ k.closed_pct|pct }}</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.per_day|num(1) }}</span><span class="kpi-l">Promedio diario</span><small>{% if k.peak %}Pico: {{ k.peak.n }} el {{ k.peak.date[8:10] }}/{{ k.peak.date[5:7] }}{% else %}Sin informes en el periodo{% endif %}</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.per_tech|num(1) }}</span><span class="kpi-l">Promedio por técnico</span><small>{{ k.techs_active }} de {{ k.techs_total }} técnico{{ '' if k.techs_total == 1 else 's' }} con actividad</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.close_hours|duration }}</span><span class="kpi-l">Tiempo medio hasta cierre</span><small>Desde la creación, informes cerrados</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.equipment }}</span><span class="kpi-l">Equipos auditados</span><small>{{ k.duplicates }} informe{{ '' if k.duplicates == 1 else 's' }} repetido{{ '' if k.duplicates == 1 else 's' }} sobre el mismo equipo{% if k.no_serial %} · {{ k.no_serial }} sin serie{% endif %}</small></div>
+      <div class="kpi is-warn"><span class="kpi-n">{{ k.bad }}</span><span class="kpi-l">Equipos en mal estado</span><small>En reparación u obsoletos{% if k.condition_missing %} · {{ k.condition_missing }} sin estado registrado{% endif %}</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.with_obs }}</span><span class="kpi-l">Equipos con observaciones</span><small>Observaciones adicionales diligenciadas</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.with_photos }}</span><span class="kpi-l">Equipos con fotografías</span><small>{{ k.with_photos_pct|pct }} del inventario · {{ k.photos_total }} foto{{ '' if k.photos_total == 1 else 's' }}</small></div>
+      <div class="kpi is-accent"><span class="kpi-n">{{ k.pending_signature }}</span><span class="kpi-l">Pendientes de firma</span><small>Cerrados sin firma del Director</small></div>
+    </div>
+  </section>
+
+  <div class="exec-grid">
+    <section class="card exec-wide" aria-labelledby="dia-t">
+      <h2 id="dia-t">Informes por día y tendencia</h2>
+      {{ day_columns(d.daily, d.daily_max) }}
+    </section>
+    <section class="card" aria-labelledby="estado-t">
+      <h2 id="estado-t">Estado de los informes</h2>
+      {{ donut(d.status, d.rows_total, 'Distribución de los informes por estado') }}
+    </section>
+    <section class="card" aria-labelledby="sem-t">
+      <h2 id="sem-t">Actividad por día de la semana</h2>
+      {{ hbars(d.weekday) }}
+    </section>
+    <section class="card" aria-labelledby="rank-t">
+      <h2 id="rank-t">Ranking de productividad</h2>
+      {% set rank_items = [] %}{% for t in d.technicians[:12] %}{% set _ = rank_items.append({'id': t.id, 'label': t.rank ~ '. ' ~ t.name, 'n': t.n}) %}{% endfor %}
+      {% macro tech_link(it) %}{{ url_for('dashboard.index', desde=date_from.isoformat(), hasta=date_to.isoformat(), tecnico=it.id) }}{% endmacro %}
+      <div class="is-ranking">{{ hbars(rank_items, link=tech_link) }}</div>
+      <p class="small muted">Informes creados en el periodo. Pulse un nombre para filtrar por ese técnico.</p>
+    </section>
+    <section class="card" aria-labelledby="inv-t">
+      <h2 id="inv-t">Inventario por estado del equipo</h2>
+      {{ hbars(d.condition) }}
+      <p class="small muted">Cada equipo (marca + número de serie) cuenta una vez, con su informe más reciente del periodo. «Sin dato»: el campo Estado no se diligenció.</p>
+    </section>
+    <section class="card" aria-labelledby="disp-t">
+      <h2 id="disp-t">Inventario por tipo de dispositivo</h2>
+      {{ hbars(d.devices) }}
+    </section>
+    <section class="card" aria-labelledby="marca-t">
+      <h2 id="marca-t">Inventario por marca</h2>
+      {{ hbars(d.brands) }}
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="matriz-t">
+    <h2 id="matriz-t">Informes por día y por técnico</h2>
+    {% set techs = d.technicians[:25] %}
+    {% if techs %}
+    {% set step = 14 %}{% set left = 150 %}{% set cols = d.daily|length %}
+    <div class="heatmap-scroll" data-scroll-end>
+      <svg class="heatmap matrix" width="{{ left + cols * step }}" height="{{ techs|length * step + 4 }}" viewBox="0 0 {{ left + cols * step }} {{ techs|length * step + 4 }}" role="img" tabindex="0" aria-label="Informes por técnico y por día">
+        {% for t in techs %}{% set row = loop.index0 %}
+        <text class="hm-wd" x="0" y="{{ row * step + 10 }}">{{ t.name|truncate(22, true, '…') }}</text>
+        {% for c in t.cells %}<rect class="hm-cell l{{ c.level }}" x="{{ left + loop.index0 * step }}" y="{{ row * step }}" width="11" height="11" rx="2" data-tip="{{ c.tip }}"></rect>{% endfor %}
+        {% endfor %}
+      </svg>
+    </div>
+    {{ heat_legend() }}
+    {% else %}<p class="muted">No hay técnicos con actividad en el periodo.</p>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="tabla-t">
+    <h2 id="tabla-t">Rendimiento por técnico</h2>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr>
+          <th scope="col" data-sort="num">#</th><th scope="col" data-sort="text">Técnico</th><th scope="col" data-sort="num">Informes</th>
+          <th scope="col" data-sort="num">Cerrados</th><th scope="col" data-sort="num">Enviados</th><th scope="col" data-sort="num">Días activos</th>
+          <th scope="col" data-sort="num">Prom./día</th><th scope="col" data-sort="num">Prom./día activo</th><th scope="col" data-sort="num">Con fotos</th>
+          <th scope="col" data-sort="num">Observ.</th><th scope="col" data-sort="num">Mal estado</th><th scope="col" data-sort="num">Tiempo a cierre</th><th scope="col" data-sort="text">Último informe</th>
+        </tr></thead>
+        <tbody>
+        {% for t in d.technicians %}
+          <tr>
+            <td data-label="#" data-v="{{ t.rank }}">{{ t.rank }}</td>
+            <td data-label="Técnico"><a href="{{ url_for('dashboard.index', desde=date_from.isoformat(), hasta=date_to.isoformat(), tecnico=t.id) }}">{{ t.name }}</a></td>
+            <td data-label="Informes" data-v="{{ t.n }}">{{ t.n }}</td>
+            <td data-label="Cerrados" data-v="{{ t.closed }}">{{ t.closed }}</td>
+            <td data-label="Enviados" data-v="{{ t.sent }}">{{ t.sent }}</td>
+            <td data-label="Días activos" data-v="{{ t.active_days }}">{{ t.active_days }}</td>
+            <td data-label="Prom./día" data-v="{{ t.per_day if t.per_day is not none else -1 }}">{{ t.per_day|num(2) }}</td>
+            <td data-label="Prom./día activo" data-v="{{ t.per_active_day if t.per_active_day is not none else -1 }}">{{ t.per_active_day|num(1) }}</td>
+            <td data-label="Con fotos" data-v="{{ t.photos_pct if t.photos_pct is not none else -1 }}">{{ t.photos_pct|pct }}</td>
+            <td data-label="Observ." data-v="{{ t.obs }}">{{ t.obs }}</td>
+            <td data-label="Mal estado" data-v="{{ t.bad }}">{{ t.bad }}</td>
+            <td data-label="Tiempo a cierre" data-v="{{ t.close_hours if t.close_hours is not none else -1 }}">{{ t.close_hours|duration }}</td>
+            <td data-label="Último informe">{{ t.last|localdt if t.last else 'Sin informes' }}</td>
+          </tr>
+        {% else %}<tr><td colspan="13" class="muted">No hay técnicos registrados.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">«Sin datos»: no hay informes en los que basar el promedio (no es un cero). Un técnico activo sin informes aparece con 0.</p>
+  </section>
+
+  {% for key, title, empty in (('bad', 'Equipos en mal estado', 'Ningún equipo en reparación u obsoleto en el periodo.'),
+                               ('with_obs', 'Equipos con observaciones', 'Ningún equipo con observaciones en el periodo.'),
+                               ('with_photos', 'Equipos con fotografías anexas', 'Ningún equipo con fotografías en el periodo.')) %}
+  {% set block = d[key] %}
+  <details class="card exec-details" {% if loop.first %}open{% endif %}>
+    <summary><h2>{{ title }} <span class="count-pill">{{ block.total }}</span></h2></summary>
+    {% if block.rows %}
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="text">Informe</th><th scope="col" data-sort="text">Equipo</th><th scope="col" data-sort="text">Dispositivo</th><th scope="col" data-sort="text">Marca · serie</th>
+          <th scope="col" data-sort="text">Técnico</th><th scope="col" data-sort="text">Estado del equipo</th><th scope="col" data-sort="num">Fotos</th><th scope="col" data-sort="text">Informe</th><th scope="col" data-sort="text">Creado</th>{% if key == 'with_obs' %}<th scope="col">Observaciones</th>{% endif %}</tr></thead>
+        <tbody>
+        {% for e in block.rows %}
+          <tr>
+            <td data-label="Informe"><a href="{{ url_for('reports.detail', report_id=e.id) }}"><code>{{ e.code }}</code></a></td>
+            <td data-label="Equipo">{{ e.title or '—' }}</td>
+            <td data-label="Dispositivo">{{ e.dispositivo or 'Sin dato' }}</td>
+            <td data-label="Marca · serie">{{ e.equipment_brand or 'Sin dato' }}{% if e.equipment_serial %} · <code>{{ e.equipment_serial }}</code>{% endif %}</td>
+            <td data-label="Técnico">{{ e.owner_name }}</td>
+            <td data-label="Estado del equipo">{{ e.estado or 'Sin dato' }}</td>
+            <td data-label="Fotos" data-v="{{ e.fotos }}">{{ e.fotos }}</td>
+            <td data-label="Estado del informe">{{ status_badge(e.status_code) }}</td>
+            <td data-label="Creado" class="nowrap">{{ e.created_at|localdt }}</td>
+            {% if key == 'with_obs' %}<td data-label="Observaciones" class="pre">{{ e.observaciones|truncate(160) }}</td>{% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if block.total > block.rows|length %}<p class="small muted">Se muestran los {{ block.rows|length }} más recientes de {{ block.total }}.</p>{% endif %}
+    {% else %}<p class="muted">{{ empty }}</p>{% endif %}
+  </details>
+  {% endfor %}
+
+  <p class="small muted">Fuente: informes no eliminados creados en el periodo, leídos directamente de la base de datos sin modificarla. Los equipos se identifican por marca y número de serie; los informes sin número de serie cuentan como equipos distintos.</p>
+</div>
+{% endblock %}

@@ -30,6 +30,7 @@
     {% if has_perm('module.reports') %}<a href="{{ url_for('reports.index') }}" {% if ep.startswith('reports.') %}aria-current="page"{% endif %}>Creación de informe</a>{% endif %}
     {% if has_perm('module.consolidation') %}<a href="{{ url_for('consolidation.index') }}" {% if ep.startswith('consolidation.') %}aria-current="page"{% endif %}>Consolidación de informes</a>{% endif %}
     {% if has_perm('module.audit_log') %}<a href="{{ url_for('logs.index') }}" {% if ep.startswith('logs.') %}aria-current="page"{% endif %}>Registro detallado</a>{% endif %}
+    {% if has_perm('dashboard.executive') %}<a href="{{ url_for('dashboard.index') }}" {% if ep.startswith('dashboard.') %}aria-current="page"{% endif %}>Tablero</a>{% endif %}
     {% if has_perm('users.manage') %}<a href="{{ url_for('admin.users_index') }}" {% if ep.startswith('admin.') %}aria-current="page"{% endif %}>Usuarios</a>{% endif %}
   </nav>
   <div class="userbox">

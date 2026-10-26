@@ -134,11 +134,12 @@ def _row(f: schema.Field, value, editable: bool, error: str | None, static: bool
 def render(template: schema.Template, values: dict, *, editable: bool, errors: dict | None = None,
            number: str = "", year: str = "", registro: dict | None = None, signatures: dict | None = None,
            logo_src: str | None = None, static: bool = False, can_receive_signature: bool = False,
-           profile_url: str | None = None) -> str:
+           profile_url: str | None = None, sign_closed: bool = False) -> str:
     """HTML de la hoja (<main class="sheet">) con los datos del informe.
 
     signatures: {"FIRMA_ELABORA": url_o_data_uri, ...}; logo_src: URL del logo (None = el de la plantilla);
-    static: True para el PDF (sin controles de formulario).
+    static: True para el PDF (sin controles de formulario); sign_closed: el Director puede firmar como
+    quien recibe aunque el informe esté cerrado (el resto de la hoja sigue bloqueado).
     """
     src = source()
     errors = errors or {}
@@ -195,7 +196,8 @@ def render(template: schema.Template, values: dict, *, editable: bool, errors: d
         caption = cap.group(1) if cap else ""
         url = signatures.get(kind)
         img = f'<img alt="{_attr(caption)}" src="{_attr(url)}">' if url else '<img alt="" hidden>'
-        if not editable or kind == "FIRMA_ELABORA" or not can_receive_signature:
+        receive_open = kind == "FIRMA_RECIBE" and ((editable and can_receive_signature) or sign_closed)
+        if not receive_open:
             hint = (f'<p class="sig-profile-hint"><a href="{_attr(profile_url)}">Cargue su firma en Mi perfil.</a></p>'
                     if kind == "FIRMA_ELABORA" and editable and not url and profile_url else "")
             return (f'<div class="sig readonly{" has" if url else ""}" data-kind="{kind}"><div class="pad">{img}</div>'

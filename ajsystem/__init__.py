@@ -19,7 +19,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
@@ -80,8 +80,8 @@ def create_app(overrides: dict | None = None) -> Flask:
     db.init_app(app)
     tz = ZoneInfo(settings.timezone)
 
-    from .web import admin, auth, consolidation, home, logs, reports  # noqa: PLC0415
-    for bp in (auth.bp, home.bp, reports.bp, consolidation.bp, logs.bp, admin.bp):
+    from .web import admin, auth, consolidation, dashboard, home, logs, reports  # noqa: PLC0415
+    for bp in (auth.bp, home.bp, reports.bp, consolidation.bp, logs.bp, admin.bp, dashboard.bp):
         app.register_blueprint(bp)
 
     from .web.reports import UPLOAD_ENDPOINTS  # noqa: PLC0415
@@ -140,6 +140,26 @@ def create_app(overrides: dict | None = None) -> Flask:
         if not value:
             return ""
         return value.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).strftime(fmt)
+
+    @app.template_filter("num")
+    def _num(value, decimals=None):
+        """Número con coma decimal; «Sin datos» si el valor no existe (None), distinto de un cero real."""
+        if value is None:
+            return "Sin datos"
+        if decimals is None:
+            decimals = 0 if float(value).is_integer() else 1
+        text = f"{value:,.{decimals}f}"
+        return text.replace(",", "\u202f").replace(".", ",")
+
+    @app.template_filter("pct")
+    def _pct(value):
+        return "Sin datos" if value is None else _num(value * 100, 0 if (value * 100).is_integer() else 1) + " %"
+
+    @app.template_filter("duration")
+    def _duration(hours):
+        if hours is None:
+            return "Sin datos"
+        return f"{_num(hours, 1)} h" if hours < 48 else f"{_num(hours / 24, 1)} días"
 
     def _error_page(code: int, message: str):
         try:

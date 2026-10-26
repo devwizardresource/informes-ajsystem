@@ -1,0 +1,70 @@
+{# Gráficas en SVG generadas en el servidor: sin librerías externas y compatibles con la CSP (sin estilos en línea).
+   Cada marca lleva data-tip; static/js/app.js muestra ese texto como información emergente. #}
+
+{% macro activity_heatmap(a, caption='') -%}
+{% set step = 14 %}{% set left = 30 %}{% set top = 18 %}
+<div class="heatmap-scroll" data-scroll-end>
+  <svg class="heatmap" viewBox="0 0 {{ left + a.weeks * step }} {{ top + 7 * step }}" role="img" tabindex="0"
+       aria-label="{{ caption or 'Calendario de informes creados' }}: {{ a.total }} informes del {{ a.start_label }} al {{ a.end_label }}">
+    {% for m in a.months %}<text class="hm-month" x="{{ left + m.col * step }}" y="11">{{ m.label }}</text>{% endfor %}
+    {% for i in (0, 2, 4) %}<text class="hm-wd" x="0" y="{{ top + i * step + 9 }}">{{ ('lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom')[i] }}</text>{% endfor %}
+    {% for c in a.cells %}<rect class="hm-cell l{{ c.level }}" x="{{ left + c.col * step }}" y="{{ top + c.row * step }}" width="11" height="11" rx="2" data-tip="{{ c.tip }}"></rect>{% endfor %}
+  </svg>
+</div>
+{{ heat_legend() }}
+{%- endmacro %}
+
+{% macro heat_legend() -%}
+<div class="hm-legend" aria-hidden="true"><span>Menos</span>{% for l in range(5) %}<i class="hm-key l{{ l }}"></i>{% endfor %}<span>Más</span></div>
+{%- endmacro %}
+
+{% macro day_columns(daily, top) -%}
+{% set w = 800 %}{% set h = 200 %}{% set pad = 28 %}{% set n = daily|length %}
+{% set bw = (w - pad) / n %}{% set scale = (h - 24) / (top if top else 1) %}
+<div class="heatmap-scroll" data-scroll-end><svg class="chart chart-days" viewBox="0 0 {{ w }} {{ h + 22 }}" role="img" aria-label="Informes creados por día y promedio móvil de 7 días">
+  {% for t in (0, 0.5, 1) %}{% set y = h - t * (top if top else 1) * scale %}
+  <line class="grid" x1="{{ pad }}" x2="{{ w }}" y1="{{ y }}" y2="{{ y }}"></line>
+  <text class="axis" x="{{ pad - 6 }}" y="{{ y + 4 }}" text-anchor="end">{{ (t * top)|num }}</text>{% endfor %}
+  {% for d in daily %}
+  <rect class="bar{% if not d.n %} zero{% endif %}" x="{{ pad + loop.index0 * bw + bw * 0.12 }}" y="{{ h - d.n * scale }}" width="{{ [bw * 0.76, 1]|max }}" height="{{ [d.n * scale, 0]|max }}"
+        data-tip="{{ d.label }} · {{ d.n }} informe{{ '' if d.n == 1 else 's' }} · promedio 7 días {{ d.avg7|num(1) }}"></rect>
+  <rect class="hit" x="{{ pad + loop.index0 * bw }}" y="0" width="{{ bw }}" height="{{ h }}"
+        data-tip="{{ d.label }} · {{ d.n }} informe{{ '' if d.n == 1 else 's' }} · promedio 7 días {{ d.avg7|num(1) }}"></rect>
+  {% endfor %}
+  <polyline class="trend" points="{% for d in daily %}{{ pad + loop.index0 * bw + bw / 2 }},{{ h - d.avg7 * scale }} {% endfor %}"></polyline>
+  {% for i in [0, (n - 1) // 2, n - 1]|unique %}
+  <text class="axis" x="{{ pad + i * bw + bw / 2 }}" y="{{ h + 16 }}" text-anchor="{{ 'start' if i == 0 else ('end' if i == n - 1 else 'middle') }}">{{ daily[i].date[8:10] }}/{{ daily[i].date[5:7] }}/{{ daily[i].date[:4] }}</text>
+  {% endfor %}
+</svg></div>
+<p class="chart-key"><i class="k-bar"></i> Informes del día <i class="k-trend"></i> Promedio móvil de 7 días</p>
+{%- endmacro %}
+
+{% macro hbars(items, total=None, link=None) -%}
+{% set top = items|map(attribute='n')|max if items else 0 %}
+<ul class="hbars">
+  {% for it in items %}
+  <li class="{% if it.missing %}is-missing{% endif %}">
+    <span class="hb-label">{% if link and it.id %}<a href="{{ link(it) }}">{{ it.label }}</a>{% else %}{{ it.label }}{% endif %}</span>
+    <svg class="hb-track" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><rect class="hb-bg" width="100" height="10" rx="2"></rect><rect class="hb-fill" width="{{ (it.n / top * 100) if top else 0 }}" height="10" rx="2" data-tip="{{ it.label }} · {{ it.n }}{% if it.pct is defined and it.pct is not none %} · {{ it.pct|pct }}{% endif %}"></rect></svg>
+    <span class="hb-n">{{ it.n }}{% if it.pct is defined and it.pct is not none %} <small>{{ it.pct|pct }}</small>{% endif %}</span>
+  </li>
+  {% else %}<li class="muted">Sin datos en el periodo.</li>{% endfor %}
+</ul>
+{%- endmacro %}
+
+{% macro donut(items, total, label) -%}
+{% set ns = namespace(acc=0) %}
+<div class="donut-wrap">
+  <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ label }}">
+    <circle class="donut-ring" cx="21" cy="21" r="15.915"></circle>
+    {% if total %}{% for it in items if it.n %}{% set p = it.n / total * 100 %}
+    <circle class="donut-seg s-{{ it.code|lower }}" cx="21" cy="21" r="15.915" stroke-dasharray="{{ p }} {{ 100 - p }}" stroke-dashoffset="{{ 25 - ns.acc }}"
+            data-tip="{{ it.label }} · {{ it.n }} · {{ it.pct|pct }}"></circle>{% set ns.acc = ns.acc + p %}
+    {% endfor %}{% endif %}
+    <text class="donut-n" x="21" y="21">{{ total }}</text><text class="donut-l" x="21" y="27">informes</text>
+  </svg>
+  <ul class="donut-legend">
+    {% for it in items %}<li><i class="s-{{ it.code|lower }}"></i>{{ it.label }} <b>{{ it.n }}</b> <small>{{ it.pct|pct }}</small></li>{% endfor %}
+  </ul>
+</div>
+{%- endmacro %}

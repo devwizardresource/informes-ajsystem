@@ -49,7 +49,7 @@ docker run -d --name ajsys-mysql-dev -p 127.0.0.1:3307:3306 \
 # 4. Base de datos: crea la base, las cuentas, aplica migraciones y privilegios mínimos
 .venv/bin/flask --app wsgi db-bootstrap
 
-# 5. Primer usuario (responsable administrativo); la contraseña se pide de forma interactiva
+# 5. Primer usuario (Director); la contraseña se pide de forma interactiva
 #    (mínimo 12 caracteres con minúscula, mayúscula, número y símbolo)
 .venv/bin/flask --app wsgi create-user --username responsable --full-name "Nombre Apellido" --role RESPONSABLE --id-number 1020304050
 
