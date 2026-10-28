@@ -18,12 +18,9 @@
       {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
     </section>
     <section>
-      <h2>Cerrados pendientes de envío</h2>
-      {{ report_rows(closed, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
-    </section>
-    <section>
-      <h2>Enviados</h2>
-      {{ report_rows(sent, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
+      <h2>Cerrados</h2>
+      <p class="small muted">Cerrar es el último paso: el informe queda bloqueado y disponible para la firma del Director.</p>
+      {{ report_rows(closed, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados todavía.') }}
     </section>
   </div>
   <aside class="aside">

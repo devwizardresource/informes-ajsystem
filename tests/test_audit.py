@@ -92,10 +92,9 @@ def test_operaciones_quedan_auditadas(browser, make_user, q):
     rid = create_report(b)
     fill(b, q, rid)
     fill(b, q, rid, accion="cerrar")
-    b.post(f"/informes/{rid}/enviar", {"op_id": new_op()})
     b.post("/logout")
     types = [r["event_type"] for r in q("SELECT event_type FROM audit_log WHERE username=%s ORDER BY seq", (t["username"],))]
-    for expected in ("LOGIN_EXITOSO", "INFORME_CREADO", "INFORME_GUARDADO", "INFORME_CERRADO", "INFORME_ENVIADO", "LOGOUT"):
+    for expected in ("LOGIN_EXITOSO", "INFORME_CREADO", "INFORME_GUARDADO", "INFORME_CERRADO", "LOGOUT"):
         assert expected in types, expected
 
 

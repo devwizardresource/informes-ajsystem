@@ -40,7 +40,7 @@ flowchart LR
 
 ### Consistencia entre la operación y la auditoría
 
-Cada operación crítica (crear, guardar, cerrar, enviar, reabrir, cambiar un rol, iniciar o cerrar sesión) escribe su evento de auditoría **en la misma transacción** que los datos. Si falla la auditoría, se revierte la operación completa; si falla la operación, no queda evento. Los eventos sin transacción propia (fallos de inicio de sesión, accesos denegados, descargas) se escriben en una transacción independiente **antes** de responder. Si esa escritura falla, la solicitud termina en error (falla cerrado): por ejemplo, un PDF no se entrega sin su registro.
+Cada operación crítica (crear, guardar, cerrar, reabrir, cambiar un rol, iniciar o cerrar sesión) escribe su evento de auditoría **en la misma transacción** que los datos. Si falla la auditoría, se revierte la operación completa; si falla la operación, no queda evento. Los eventos sin transacción propia (fallos de inicio de sesión, accesos denegados, descargas) se escriben en una transacción independiente **antes** de responder. Si esa escritura falla, la solicitud termina en error (falla cerrado): por ejemplo, un PDF no se entrega sin su registro.
 
 ## 2. Ciclo de vida del informe
 
@@ -142,7 +142,6 @@ El número de serie del equipo **no** identifica al informe: un mismo equipo pue
 | `/informes`, `/informes/nuevo` | GET / POST | `module.reports`, `report.create` |
 | `/informes/<id>` | GET | módulo de informes + visibilidad del recurso |
 | `/informes/<id>/guardar` (accion=guardar\|cerrar) | POST | capacidad `edit`/`close` del recurso |
-| `/informes/<id>/enviar` | POST | capacidad `send` |
 | `/informes/<id>/reabrir` | POST | `report.reopen` |
 | `/informes/<id>/solicitar-reapertura` | POST | `report.request_reopen` (autor) |
 | `/informes/<id>/resolver-solicitud` | POST | `report.reopen` |
@@ -152,7 +151,8 @@ El número de serie del equipo **no** identifica al informe: un mismo equipo pue
 | `/informes/<id>/eliminar`, `/informes/<id>/restaurar`, `/informes/eliminados` | POST / GET | `report.delete` |
 | `/informes/plantilla.css` | GET | — (CSS de `resources/Plantilla_Informe_AJ_System.html`) |
 | `/informes/<id>/pdf` | GET | `report.download` + visibilidad |
-| `/consolidacion` | GET | `module.consolidation`, `report.view_sent` |
+| `/consolidacion` | GET | `module.consolidation` (Director y jefe) |
 | `/registro`, `/registro/sesiones`, `/registro/verificar` | GET / POST | `module.audit_log`, `audit.read` / `audit.verify` |
 | `/administracion/...` | GET/POST | `users.manage` |
 | `/administracion/usuarios/<id>/firma` | POST | `users.manage`; solo cuentas con rol `TECNICO` |
+| `/administracion/usuarios/<id>/eliminar` | POST | `users.manage`; confirmación «ELIMINAR»; eliminación lógica |

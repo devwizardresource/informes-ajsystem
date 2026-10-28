@@ -4,80 +4,106 @@
 <h1>Usuarios y roles</h1>
 
 <section class="card">
-  <h2>Usuarios</h2>
-  <div class="table-wrap">
-  <table class="table table-dense users-table">
-    <thead><tr><th scope="col">Usuario</th><th scope="col">Nombre</th><th scope="col">N.º identificación</th><th scope="col">WhatsApp</th><th scope="col">Rol</th><th scope="col">Firma para informes</th><th scope="col">Estado</th><th scope="col">Último acceso</th><th scope="col">Acciones</th></tr></thead>
-    <tbody>
+  <h2>Usuarios <span class="count-pill">{{ users|length }}</span></h2>
+  <p class="small muted">Pulse sobre un usuario para ver y modificar sus datos, su acceso y su firma.</p>
+  <div class="user-list">
+    <div class="user-row user-row-head" aria-hidden="true">
+      <span>Nombre</span><span>Usuario</span><span>Rol</span><span>Estado</span><span>Último acceso</span>
+    </div>
     {% for u in users %}
-      <tr>
-        <td data-label="Usuario"><code>{{ u.username }}</code></td>
-        <td data-label="Nombre">{{ u.full_name }}</td>
-        <td data-label="N.º identificación">
-          <form method="post" action="{{ url_for('admin.users_id_number', user_id=u.id) }}" class="inline" data-busy>
+    <details class="user-card">
+      <summary class="user-row">
+        <span class="user-name"><b>{{ u.full_name }}</b>{% if u.id == current_user.id %} <small class="muted">(usted)</small>{% endif %}</span>
+        <span><code>{{ u.username }}</code></span>
+        <span>{{ u.role_name }}</span>
+        <span><span class="status-pill {{ 'is-active' if u.is_active else 'is-inactive' }}">{{ 'Activo' if u.is_active else 'Inactivo' }}</span>{% if u.must_change_password %} <small class="muted">primer acceso pendiente</small>{% endif %}</span>
+        <span class="small muted">{{ u.last_login_at|localdt or 'Nunca' }}</span>
+      </summary>
+      <div class="user-panels">
+        <div class="user-panel">
+          <h3>Datos</h3>
+          <form method="post" action="{{ url_for('admin.users_id_number', user_id=u.id) }}" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="sr-only" for="idn-{{ u.id }}">Identificación de {{ u.username }}</label>
-            <input id="idn-{{ u.id }}" name="id_number" value="{{ u.id_number or '' }}" maxlength="20" size="12" inputmode="numeric">
-            <button type="submit" class="btn btn-sm">Guardar</button>
+            <label for="idn-{{ u.id }}">N.º de identificación</label>
+            <div class="field-row">
+              <input id="idn-{{ u.id }}" name="id_number" value="{{ u.id_number or '' }}" maxlength="20" inputmode="numeric">
+              <button type="submit" class="btn btn-sm">Guardar</button>
+            </div>
           </form>
-        </td>
-        <td data-label="WhatsApp">
-          <form method="post" action="{{ url_for('admin.users_phone_number', user_id=u.id) }}" class="inline user-phone-form" data-busy>
+          <form method="post" action="{{ url_for('admin.users_phone_number', user_id=u.id) }}" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="sr-only" for="phone-{{ u.id }}">WhatsApp de {{ u.username }} (indicativo del país)</label>
-            <input id="phone-{{ u.id }}" name="phone_number" value="{{ u.phone_number or '' }}" maxlength="24" inputmode="tel" placeholder="+57 300 123 4567">
-            <button type="submit" class="btn btn-sm">Guardar</button>
+            <label for="phone-{{ u.id }}">WhatsApp (con indicativo del país)</label>
+            <div class="field-row">
+              <input id="phone-{{ u.id }}" name="phone_number" value="{{ u.phone_number or '' }}" maxlength="24" inputmode="tel" placeholder="+57 300 123 4567">
+              <button type="submit" class="btn btn-sm">Guardar</button>
+            </div>
           </form>
-        </td>
-        <td data-label="Rol">
-          <form method="post" action="{{ url_for('admin.users_role', user_id=u.id) }}" class="inline" data-busy>
+        </div>
+
+        <div class="user-panel">
+          <h3>Acceso</h3>
+          <form method="post" action="{{ url_for('admin.users_role', user_id=u.id) }}" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="sr-only" for="rol-{{ u.id }}">Rol de {{ u.username }}</label>
-            <select id="rol-{{ u.id }}" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if r.code == u.role_code %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
-            <button type="submit" class="btn btn-sm" data-confirm="¿Cambiar el rol de {{ u.username }}? Se cerrarán sus sesiones abiertas.">Aplicar</button>
+            <label for="rol-{{ u.id }}">Rol</label>
+            <div class="field-row">
+              <select id="rol-{{ u.id }}" name="role_id">{% for r in roles %}<option value="{{ r.id }}" {% if r.code == u.role_code %}selected{% endif %}>{{ r.display_name }}</option>{% endfor %}</select>
+              <button type="submit" class="btn btn-sm" data-confirm="¿Cambiar el rol de {{ u.username }}? Se cerrarán sus sesiones abiertas.">Aplicar</button>
+            </div>
           </form>
-        </td>
-        <td data-label="Firma para informes">
-          {% if u.role_code == 'TECNICO' %}
-          <p class="help">{{ 'Firma registrada' if u.has_signature else 'Sin firma' }}</p>
+          {% if u.id != current_user.id %}
+          <div class="actions">
+            <form method="post" action="{{ url_for('admin.users_status', user_id=u.id) }}" class="inline" data-busy>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="activo" value="{{ '0' if u.is_active else '1' }}">
+              <button type="submit" class="btn btn-sm btn-ghost" data-confirm="¿{{ 'Desactivar' if u.is_active else 'Activar' }} la cuenta {{ u.username }}?">{{ 'Desactivar cuenta' if u.is_active else 'Activar cuenta' }}</button>
+            </form>
+            {% if u.is_active and u.must_change_password and u.phone_number %}
+            <form method="post" action="{{ url_for('admin.users_invitation_whatsapp', user_id=u.id) }}" class="inline" target="_blank" data-busy>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-primary">Invitar por WhatsApp</button>
+            </form>
+            {% endif %}
+          </div>
+          <form method="post" action="{{ url_for('admin.users_password', user_id=u.id) }}" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="pw-{{ u.id }}">Restablecer contraseña (temporal)</label>
+            <input id="pw-{{ u.id }}" name="password" type="password" minlength="12" autocomplete="new-password" data-reveal-password required>
+            <p class="help">{{ policy }}</p>
+            <button type="submit" class="btn btn-sm" data-confirm="¿Restablecer la contraseña de {{ u.username }}?">Restablecer</button>
+          </form>
+          {% endif %}
+        </div>
+
+        {% if u.role_code == 'TECNICO' %}
+        <div class="user-panel">
+          <h3>Firma para informes</h3>
+          <p class="help">{{ 'Firma registrada.' if u.has_signature else 'Sin firma registrada.' }} Se usa al cerrar sus informes.</p>
           <form method="post" action="{{ url_for('admin.users_signature', user_id=u.id) }}" enctype="multipart/form-data" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="sr-only" for="firma-{{ u.id }}">Firma de {{ u.username }}</label>
+            <label for="firma-{{ u.id }}">Imagen de la firma</label>
             <input id="firma-{{ u.id }}" name="firma" type="file" accept="image/jpeg,image/png,image/webp" required>
             <button type="submit" class="btn btn-sm">{{ 'Reemplazar firma' if u.has_signature else 'Cargar firma' }}</button>
           </form>
-          {% else %}—{% endif %}
-        </td>
-        <td data-label="Estado"><span class="status-pill {{ 'is-active' if u.is_active else 'is-inactive' }}">{{ 'Activo' if u.is_active else 'Inactivo' }}</span>{% if u.must_change_password %}<br><small class="muted">primer acceso pendiente</small>{% endif %}</td>
-        <td data-label="Último acceso">{{ u.last_login_at|localdt }}</td>
-        <td data-label="Acciones">
-          {% if u.id != current_user.id %}
-          <form method="post" action="{{ url_for('admin.users_status', user_id=u.id) }}" class="inline" data-busy>
+        </div>
+        {% endif %}
+
+        {% if u.id != current_user.id %}
+        <div class="user-panel danger-panel">
+          <h3>Eliminar usuario</h3>
+          <p class="help">La cuenta deja de poder iniciar sesión y desaparece de esta lista. Sus informes, firmas y su historial se conservan a su nombre.</p>
+          <form method="post" action="{{ url_for('admin.users_delete', user_id=u.id) }}" data-busy>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="activo" value="{{ '0' if u.is_active else '1' }}">
-            <button type="submit" class="btn btn-sm btn-ghost" data-confirm="¿{{ 'Desactivar' if u.is_active else 'Activar' }} la cuenta {{ u.username }}?">{{ 'Desactivar' if u.is_active else 'Activar' }}</button>
+            <label for="del-{{ u.id }}">Escriba ELIMINAR para confirmar</label>
+            <div class="field-row">
+              <input id="del-{{ u.id }}" name="confirmar" required pattern="ELIMINAR" autocomplete="off" autocapitalize="characters">
+              <button type="submit" class="btn btn-sm btn-danger" data-confirm="¿Eliminar definitivamente la cuenta {{ u.username }}?">Eliminar</button>
+            </div>
           </form>
-          {% if u.is_active and u.must_change_password and u.phone_number %}
-          <form method="post" action="{{ url_for('admin.users_invitation_whatsapp', user_id=u.id) }}" class="inline" target="_blank" data-busy>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-primary">Invitar por WhatsApp</button>
-          </form>
-          {% endif %}
-          <details class="inline-details"><summary>Restablecer contraseña</summary>
-            <form method="post" action="{{ url_for('admin.users_password', user_id=u.id) }}" data-busy>
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <label for="pw-{{ u.id }}">Contraseña temporal</label>
-              <p class="help">{{ policy }}</p>
-              <input id="pw-{{ u.id }}" name="password" type="password" minlength="12" autocomplete="new-password" data-reveal-password required>
-              <button type="submit" class="btn btn-sm" data-confirm="¿Restablecer la contraseña de {{ u.username }}?">Restablecer</button>
-            </form>
-          </details>
-          {% endif %}
-        </td>
-      </tr>
+        </div>
+        {% endif %}
+      </div>
+    </details>
     {% endfor %}
-    </tbody>
-  </table>
   </div>
 </section>
 

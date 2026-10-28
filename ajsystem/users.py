@@ -50,11 +50,14 @@ def list_users() -> list[dict]:
         """SELECT u.id, u.username, u.full_name, u.id_number, u.phone_number, u.is_active, u.must_change_password, u.created_at,
                   u.last_login_at, r.code AS role_code, r.display_name AS role_name,
                   EXISTS(SELECT 1 FROM user_signatures s WHERE s.user_id = u.id) AS has_signature
-             FROM users u JOIN roles r ON r.id = u.role_id ORDER BY r.id, u.full_name""")
+             FROM users u JOIN roles r ON r.id = u.role_id
+            WHERE u.deleted_at IS NULL ORDER BY r.id, u.full_name""")
 
 
 def technicians_and_owners() -> list[dict]:
-    return db.query_all("SELECT id, full_name, username FROM users ORDER BY full_name")
+    """Autores posibles de informes, también los eliminados: sus informes siguen en la consolidación."""
+    return db.query_all("SELECT id, full_name, username, deleted_at IS NOT NULL AS deleted FROM users "
+                        "ORDER BY deleted_at IS NOT NULL, full_name")
 
 
 def _validate_new(username: str, full_name: str, id_number: str, password: str, role_id) -> dict:
@@ -133,7 +136,8 @@ def create_user(username, full_name, id_number, password, role_id, phone_number=
 
 def _lock_user(cur, user_id: int) -> dict:
     cur.execute("""SELECT u.id, u.username, u.role_id, u.is_active, r.code AS role_code
-                     FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = %s FOR UPDATE""", (user_id,))
+                     FROM users u JOIN roles r ON r.id = u.role_id
+                    WHERE u.id = %s AND u.deleted_at IS NULL FOR UPDATE""", (user_id,))
     row = cur.fetchone()
     if not row:
         raise UserError("Usuario no encontrado.")
@@ -184,6 +188,34 @@ def set_active(user_id: int, active: bool, actor: dict) -> None:
             revoked = cur.rowcount
         audit.write(cur, audit.USER_STATUS_CHANGED, "EXITO", object_type="usuario", object_id=target["username"],
                     detail={"usuario_id": user_id, "activo": active, "sesiones_revocadas": revoked})
+
+
+def delete_user(user_id: int, actor: dict) -> str:
+    """Elimina la cuenta de forma lógica: deja de existir para iniciar sesión y en la gestión de usuarios.
+
+    Nada se borra: sus informes, firmas, versiones y auditoría siguen intactos y a su nombre
+    (las claves foráneas lo exigen y la cadena de auditoría depende de ello). El nombre de usuario
+    y la identificación quedan reservados para no confundir el historial con otra persona.
+    """
+    with db.transaction() as cur:
+        target = _lock_user(cur, user_id)
+        if target["id"] == actor["id"]:
+            raise UserError("No puede eliminar su propia cuenta.")
+        if target["role_code"] == "RESPONSABLE" and target["is_active"] and _active_responsables(cur) <= 1:
+            raise UserError("No se puede eliminar al último Director activo.")
+        now = db.utcnow()
+        cur.execute("UPDATE users SET is_active = 0, deleted_at = %s, deleted_by = %s, updated_at = %s WHERE id = %s",
+                    (now, actor["id"], now, user_id))
+        cur.execute("UPDATE sessions SET ended_at = %s, end_reason = 'REVOCADA' WHERE user_id = %s AND ended_at IS NULL",
+                    (now, user_id))
+        revoked = cur.rowcount
+        cur.execute("UPDATE user_invitations SET used_at = %s WHERE user_id = %s AND used_at IS NULL", (now, user_id))
+        cur.execute("SELECT COUNT(*) AS n FROM reports WHERE owner_id = %s", (user_id,))
+        reports = cur.fetchone()["n"]
+        audit.write(cur, audit.USER_DELETED, "EXITO", object_type="usuario", object_id=target["username"],
+                    detail={"usuario_id": user_id, "rol": target["role_code"], "sesiones_revocadas": revoked,
+                            "informes_conservados": reports})
+    return target["username"]
 
 
 def set_id_number(user_id: int, id_number: str, actor: dict) -> None:
@@ -247,7 +279,8 @@ def _store_signature(user_id: int, raw: bytes, *, required_role: str | None, cha
     now = db.utcnow()
     with db.transaction() as cur:
         cur.execute("""SELECT u.id, u.username, r.code AS role_code FROM users u
-                         JOIN roles r ON r.id = u.role_id WHERE u.id = %s FOR UPDATE""", (user_id,))
+                         JOIN roles r ON r.id = u.role_id WHERE u.id = %s AND u.deleted_at IS NULL FOR UPDATE""",
+                    (user_id,))
         target = cur.fetchone()
         if not target:
             raise UserError("Usuario no encontrado.")
@@ -280,7 +313,7 @@ def issue_invitation(user_id: int, actor: dict) -> tuple[str, str, str, str]:
     now = db.utcnow()
     with db.transaction() as cur:
         cur.execute("""SELECT id, username, full_name, phone_number, is_active, must_change_password
-                         FROM users WHERE id = %s FOR UPDATE""", (user_id,))
+                         FROM users WHERE id = %s AND deleted_at IS NULL FOR UPDATE""", (user_id,))
         target = cur.fetchone()
         if not target:
             raise UserError("Usuario no encontrado.")

@@ -1,5 +1,5 @@
 {% macro status_badge(code) -%}
-<span class="badge badge-{{ code|lower }}">{{ STATUS_LABELS.get(code, code) }}</span>
+<span class="badge badge-{{ 'cerrado' if code == 'ENVIADO' else code|lower }}">{{ STATUS_LABELS.get(code, code) }}</span>
 {%- endmacro %}
 
 {% macro pagination(page, pages, endpoint) -%}

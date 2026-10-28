@@ -22,7 +22,7 @@ def test_tecnico_no_accede_a_modulos_restringidos(browser, make_user, q, path):
 def test_tecnico_no_ve_enlaces_restringidos(browser, make_user):
     html = browser(make_user("TECNICO")).get("/").get_data(as_text=True)
     assert "Creación de informe" in html
-    assert "Consolidación de informes" in html and "Registro detallado" not in html
+    assert "Consolidación" not in html and "Registro detallado" not in html
 
 
 def test_tecnico_no_puede_descargar(browser, make_user, q):
@@ -46,15 +46,22 @@ def test_tecnico_puede_reabrir_con_motivo_sin_aprobacion(browser, make_user, q):
     assert q("SELECT status_code FROM reports WHERE id = %s", (rid,))[0]["status_code"] == "REABIERTO"
 
 
-def test_tecnico_puede_ver_y_editar_informes_ajenos(browser, make_user, q):
+def test_tecnico_no_ve_ni_edita_informes_ajenos(browser, make_user, q):
     a, b_user = make_user("TECNICO"), make_user("TECNICO")
     ba = browser(a)
     rid = create_report(ba)
+    fill(ba, q, rid, accion="cerrar", nombre="Equipo ajeno")
+    code = q("SELECT code FROM reports WHERE id = %s", (rid,))[0]["code"]
     bb = browser(b_user)
-    assert bb.get(f"/informes/{rid}").status_code == 200
-    r = fill(bb, q, rid, nombre="Editado por otro técnico")
-    assert r.status_code == 302
-    assert q("SELECT title FROM reports WHERE id = %s", (rid,))[0]["title"] == "Editado por otro técnico"
+    assert bb.get(f"/informes/{rid}").status_code == 404
+    assert bb.get(f"/informes/{rid}/adjuntos/{'0' * 32}").status_code == 404
+    assert bb.post(f"/informes/{rid}/reabrir", {"motivo": "Intento de reabrir ajeno", "op_id": new_op()}).status_code == 404
+    assert code not in bb.get("/").get_data(as_text=True)
+    assert code not in bb.get("/informes").get_data(as_text=True)
+    # La Consolidación no existe para el técnico (antes respondía 403 desde el menú)
+    assert bb.get("/consolidacion").status_code == 403
+    assert q("SELECT title, status_code FROM reports WHERE id = %s", (rid,))[0] == {
+        "title": "Equipo ajeno", "status_code": "CERRADO"}
 
 
 @pytest.mark.parametrize("role", ["JEFE", "RESPONSABLE"])

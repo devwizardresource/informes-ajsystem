@@ -1,4 +1,4 @@
-"""Módulo 3 · Consolidación de informes (responsable administrativo y jefe)."""
+"""Módulo 3 · Consolidación de informes (Director y jefe; los técnicos no tienen acceso)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -34,7 +34,7 @@ def page_number() -> int:
 
 
 @bp.route("")
-@require_perm("module.consolidation", "report.view_sent")
+@require_perm("module.consolidation")
 def index():
     settings = current_app.config["AJS_SETTINGS"]
     args = request.args
@@ -43,8 +43,10 @@ def index():
         "serial": args.get("serie", "").strip()[:100],
         "brand": args.get("marca", "").strip()[:100],
         "sort": args.get("orden") if args.get("orden") in service.SORTS else "recientes",
-        "status": args.get("estado") if args.get("estado") in service.STATUS_LABELS else "",
-        "date_field": "sent" if args.get("fecha_por") == "sent" else "created",
+        # «ENVIADO» (informes antiguos) se consulta como «Cerrado».
+        "status": service.CERRADO if args.get("estado") == service.ENVIADO else (
+            args.get("estado") if args.get("estado") in service.FILTER_STATUSES else ""),
+        "date_field": "closed" if args.get("fecha_por") in ("closed", "sent") else "created",
         "desde": args.get("desde", ""),
         "hasta": args.get("hasta", ""),
     }

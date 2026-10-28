@@ -1,8 +1,9 @@
 """Ciclo de vida de los informes: máquina de estados controlada en Python y persistida en MySQL.
 
-Estados: EN_ELABORACION → CERRADO → ENVIADO;  CERRADO/ENVIADO → REABIERTO → CERRADO → ...
-Un técnico edita su informe mientras está abierto («Guardar cambios»). Al cerrarlo queda
-bloqueado: para volver a editarlo debe solicitar la reapertura al jefe o al responsable.
+Estados: EN_ELABORACION → CERRADO;  CERRADO → REABIERTO → CERRADO → ...
+Un técnico edita su informe mientras está abierto («Guardar cambios»). Cerrarlo es el último paso:
+queda bloqueado y disponible para la firma del Director. ENVIADO solo existe en informes
+antiguos (el paso «Enviar» se retiró) y se trata y se muestra como «Cerrado».
 Cada operación crítica se ejecuta en UNA transacción que incluye: bloqueo de la fila del
 informe (SELECT ... FOR UPDATE), comprobación de permisos y estado, cambios, historial
 (report_versions / report_events) y evento de auditoría. Si cualquiera falla, se revierte todo.
@@ -26,7 +27,9 @@ from . import schema
 EN_ELABORACION, CERRADO, ENVIADO, REABIERTO = "EN_ELABORACION", "CERRADO", "ENVIADO", "REABIERTO"
 EDITABLE = {EN_ELABORACION, REABIERTO}
 CLOSED = {CERRADO, ENVIADO}
-STATUS_LABELS = {EN_ELABORACION: "En elaboración", CERRADO: "Cerrado", ENVIADO: "Enviado", REABIERTO: "Reabierto"}
+STATUS_LABELS = {EN_ELABORACION: "En elaboración", CERRADO: "Cerrado", ENVIADO: "Cerrado", REABIERTO: "Reabierto"}
+# Estados que se ofrecen en filtros y resúmenes (ENVIADO se agrupa con CERRADO).
+FILTER_STATUSES = (EN_ELABORACION, REABIERTO, CERRADO)
 _IDEM_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -69,7 +72,8 @@ def visibility_clause(user: dict, alias: str = "r") -> tuple[str, tuple]:
     return f"{alive} AND {alias}.owner_id = %s", (user["id"],)
 
 
-def capabilities(report: dict, user: dict, pending_request: dict | None = None) -> dict:
+def capabilities(report: dict, user: dict, pending_request: dict | None = None, signed: bool = False) -> dict:
+    """signed: el informe tiene la firma vigente del Director (solo el Director puede reabrirlo)."""
     own = report["owner_id"] == user["id"]
     perms = user["permissions"]
     manage = (own and "report.edit_own" in perms) or "report.edit_any" in perms
@@ -77,8 +81,8 @@ def capabilities(report: dict, user: dict, pending_request: dict | None = None) 
     return {
         "edit": manage and status in EDITABLE,
         "close": manage and status in EDITABLE,
-        "send": manage and status == CERRADO,
-        "reopen": "report.reopen" in perms and status in CLOSED,
+        "reopen": ("report.reopen" in perms and status in CLOSED
+                   and (not signed or "report.sign_closed" in perms)),
         # El autor sin permiso de reapertura la solicita al jefe o al responsable.
         "request_reopen": (own and "report.request_reopen" in perms and "report.reopen" not in perms
                            and status in CLOSED and pending_request is None),
@@ -322,32 +326,6 @@ def close(report_id: int, user: dict, form, expected_revision, idem_key: str | N
     return {"already": False}
 
 
-def send(report_id: int, user: dict, idem_key: str | None) -> dict:
-    """«Enviar informe»: operación distinta del cierre. Idempotente por identificador de operación."""
-    key = _check_idem(idem_key)
-    with db.transaction() as cur:
-        report = _lock_visible(cur, report_id, user)
-        if _event_exists(cur, report_id, "ENVIAR", key):
-            return {"already": True}
-        if report["status_code"] == ENVIADO:
-            raise ReportError("El informe ya fue enviado. No se registró un envío duplicado.", code="duplicado")
-        if report["status_code"] != CERRADO:
-            raise ReportError("Solo se pueden enviar informes cerrados. Cierre el informe primero.", code="estado")
-        if not capabilities(report, user)["send"]:
-            raise ReportError("No tiene permiso para enviar este informe.", status=403)
-        now = db.utcnow()
-        cur.execute("UPDATE reports SET status_code = %s, first_sent_at = COALESCE(first_sent_at, %s), "
-                    "last_sent_at = %s, last_sent_by = %s WHERE id = %s AND status_code = %s",
-                    (ENVIADO, now, now, user["id"], report_id, CERRADO))
-        if cur.rowcount != 1:
-            raise ReportError("Conflicto de concurrencia al enviar.", code="conflicto")
-        _insert_event(cur, report_id, "ENVIAR", CERRADO, ENVIADO, report["revision"], user, now, key=key)
-        audit.write(cur, audit.REPORT_SENT, "EXITO", object_type="informe", object_id=report["code"],
-                    detail={"informe_id": report_id, "estado_anterior": CERRADO, "estado_nuevo": ENVIADO,
-                            "revision": report["revision"], "reenvio": report["first_sent_at"] is not None})
-    return {"already": False}
-
-
 def _check_reason(reason: str, field: str = "motivo") -> str:
     reason = (reason or "").strip()
     if len(reason) < 10 or len(reason) > 1000:
@@ -363,7 +341,13 @@ def _pending_request(cur, report_id: int) -> dict | None:
 
 def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row: dict | None = None) -> None:
     if report["status_code"] not in CLOSED:
-        raise ReportError("Solo se pueden reabrir informes cerrados o enviados.", code="estado")
+        raise ReportError("Solo se pueden reabrir informes cerrados.", code="estado")
+    cur.execute("SELECT public_id FROM report_attachments WHERE report_id = %s AND kind = 'FIRMA_RECIBE' "
+                "AND deleted_at IS NULL FOR UPDATE", (report["id"],))
+    signature = cur.fetchone()
+    if signature and "report.sign_closed" not in user["permissions"]:
+        raise ReportError("El Director ya firmó este informe: solo el Director puede reabrirlo.", status=403,
+                          code="firmado")
     now = db.utcnow()
     cur.execute("UPDATE reports SET status_code = %s, reopen_count = reopen_count + 1, updated_at = %s, "
                 "updated_by = %s WHERE id = %s AND status_code = %s",
@@ -372,6 +356,11 @@ def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row
         raise ReportError("Conflicto de concurrencia al reabrir.", code="conflicto")
     _insert_event(cur, report["id"], "REABRIR", report["status_code"], REABIERTO, report["revision"], user, now,
                   reason=reason, key=key)
+    if signature:
+        # La firma aprobaba el contenido cerrado: se retira (queda en el historial) y el informe
+        # vuelve a estar pendiente de firma cuando se cierre de nuevo.
+        cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s WHERE public_id = %s",
+                    (now, user["id"], signature["public_id"]))
     pending = request_row or _pending_request(cur, report["id"])
     if pending:  # reabrir resuelve también la solicitud pendiente del técnico
         cur.execute("UPDATE reopen_requests SET status = 'APROBADA', resolved_by = %s, resolved_at = %s, "
@@ -380,7 +369,8 @@ def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row
     audit.write(cur, audit.REPORT_REOPENED, "EXITO", object_type="informe", object_id=report["code"],
                 detail={"informe_id": report["id"], "estado_anterior": report["status_code"],
                         "estado_nuevo": REABIERTO, "motivo": reason, "operacion": "reapertura autorizada",
-                        "solicitud_id": pending["id"] if pending else None})
+                        "solicitud_id": pending["id"] if pending else None,
+                        "firma_director_retirada": signature["public_id"] if signature else None})
 
 
 def reopen(report_id: int, user: dict, reason: str, idem_key: str | None) -> dict:
@@ -552,15 +542,14 @@ def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dic
 
 
 def home_lists(user: dict) -> dict[str, list[dict]]:
-    """Load the three lists owned by the user with one indexed database round-trip."""
+    """Load the lists owned by the user with one indexed database round-trip."""
     names = ("id", "code", "title", "equipment_serial", "equipment_brand", "status_code", "revision",
              "created_at", "updated_at", "closed_at", "last_sent_at", "reopen_count")
     columns = ", ".join(names)
     qualified_columns = ", ".join(f"q.{name}" for name in names)
     groups = (
         ("drafts", (EN_ELABORACION, REABIERTO), 50),
-        ("closed_pending", (CERRADO,), 50),
-        ("sent_own", (ENVIADO,), 20),
+        ("closed_own", (CERRADO, ENVIADO), 50),
     )
     branches, params = [], []
     for bucket, statuses, limit in groups:
@@ -598,10 +587,13 @@ def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[d
     if filters.get("serial"):
         where.append("r.equipment_serial LIKE %s")
         args.append(f"%{_like_escape(filters['serial'])}%")
-    if filters.get("status"):
+    if filters.get("status") == CERRADO:
+        where.append("r.status_code IN (%s, %s)")
+        args.extend((CERRADO, ENVIADO))
+    elif filters.get("status"):
         where.append("r.status_code = %s")
         args.append(filters["status"])
-    date_col = "r.last_sent_at" if filters.get("date_field") == "sent" else "r.created_at"
+    date_col = "r.closed_at" if filters.get("date_field") == "closed" else "r.created_at"
     if filters.get("from_utc"):
         where.append(f"{date_col} >= %s")
         args.append(filters["from_utc"])
@@ -640,28 +632,31 @@ def brands(user: dict) -> list[str]:
 def summary(user: dict) -> dict:
     clause, params = visibility_clause(user)
     rows = db.query_all(f"SELECT r.status_code, COUNT(*) AS n FROM reports r WHERE {clause} GROUP BY r.status_code", params)
-    counts = {s: 0 for s in STATUS_LABELS}
-    counts.update({r["status_code"]: r["n"] for r in rows})
+    counts = {s: 0 for s in FILTER_STATUSES}
+    for r in rows:
+        counts[CERRADO if r["status_code"] == ENVIADO else r["status_code"]] += r["n"]
     return counts
 
 
-def recent_sent(user: dict, limit: int = 15) -> list[dict]:
+def recent_closed(user: dict, limit: int = 15) -> list[dict]:
     clause, params = visibility_clause(user)
     return db.query_all(
-        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.last_sent_at,
+        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.closed_at,
                    r.reopen_count, o.full_name AS owner_name
               FROM reports r JOIN users o ON o.id = r.owner_id
-             WHERE {clause} AND r.status_code = %s
-             ORDER BY r.last_sent_at DESC LIMIT %s""", (*params, ENVIADO, limit))
+             WHERE {clause} AND r.status_code IN (%s, %s)
+             ORDER BY r.closed_at DESC, r.id DESC LIMIT %s""", (*params, CERRADO, ENVIADO, limit))
 
 
 def in_correction(user: dict, limit: int = 15) -> list[dict]:
+    """Informes reabiertos para corregirlos (vuelven a la lista de cerrados al cerrarse otra vez)."""
     clause, params = visibility_clause(user)
     return db.query_all(
-        f"""SELECT r.id, r.code, r.title, r.status_code, r.updated_at, o.full_name AS owner_name
+        f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.updated_at,
+                   r.reopen_count, o.full_name AS owner_name
               FROM reports r JOIN users o ON o.id = r.owner_id
-             WHERE {clause} AND r.status_code IN (%s, %s) AND r.first_sent_at IS NOT NULL
-             ORDER BY r.updated_at DESC LIMIT %s""", (*params, REABIERTO, CERRADO, limit))
+             WHERE {clause} AND r.status_code = %s
+             ORDER BY r.updated_at DESC LIMIT %s""", (*params, REABIERTO, limit))
 
 
 def _like_escape(value: str) -> str:

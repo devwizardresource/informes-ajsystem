@@ -233,7 +233,7 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
         technicians.append({
             "id": uid, "name": name, "n": len(own),
             "closed": sum(1 for r in own if r["status_code"] in CLOSED),
-            "sent": sum(1 for r in own if r["status_code"] == ENVIADO),
+            "signed": sum(1 for r in own if r["status_code"] in CLOSED and r["firmado"]),
             "active_days": len(own_days), "per_day": _ratio(len(own), n_days),
             "per_active_day": _ratio(len(own), len(own_days)),
             "photos_pct": _ratio(sum(1 for r in own if r["fotos"]), len(own)),
@@ -259,9 +259,10 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
     no_serial = sum(1 for k in latest if k.startswith("informe:"))
 
     statuses = Counter(r["status_code"] for r in rows)
+    statuses[CERRADO] += statuses.pop(ENVIADO, 0)  # los informes «enviados» antiguos cuentan como cerrados
     status_dist = [{"code": code, "label": STATUS_LABELS[code], "n": statuses.get(code, 0),
                     "pct": _ratio(statuses.get(code, 0), len(rows))}
-                   for code in (EN_ELABORACION, REABIERTO, CERRADO, ENVIADO)]
+                   for code in (EN_ELABORACION, REABIERTO, CERRADO)]
     closed_rows = [r for r in rows if r["status_code"] in CLOSED]
     active_techs = [t for t in technicians if t["n"]]
 
@@ -283,7 +284,6 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
             "per_tech": _ratio(len(rows), len(active_techs)),
             "closed": len(closed_rows),
             "closed_pct": _ratio(len(closed_rows), len(rows)),
-            "sent": statuses.get(ENVIADO, 0),
             "pending_signature": sum(1 for r in closed_rows if not r["firmado"]),
             "close_hours": _mean([r["close_hours"] for r in rows]),
             "with_photos": sum(1 for e in equipment if e["fotos"]),

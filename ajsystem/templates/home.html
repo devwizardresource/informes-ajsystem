@@ -8,19 +8,63 @@
     <section class="hero">
       <h1>Bienvenido/a, {{ current_user.full_name }}</h1>
       <p>Perfil: {{ current_user.role_name }} · Usuario: {{ current_user.username }}</p>
+      {% if has_perm('report.create') %}
       <div class="actions">
-        {% if has_perm('report.create') %}
         <form method="post" action="{{ url_for('reports.create') }}" class="inline" data-busy>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-primary">Crear informe nuevo</button>
         </form>
-        {% endif %}
-        {% if has_perm('module.consolidation') %}<a class="btn btn-ghost" href="{{ url_for('consolidation.index') }}">Consolidación</a>{% endif %}
-        {% if has_perm('dashboard.executive') %}<a class="btn btn-ghost" href="{{ url_for('dashboard.index') }}">Tablero ejecutivo</a>{% endif %}
       </div>
+      {% endif %}
     </section>
 
-    {% if activity is defined and not dashboard_unavailable %}
+    {% if dashboard_unavailable %}
+    <div class="notice notice-info" role="status">
+      No se pudieron cargar todos los datos del panel. Los accesos rápidos siguen disponibles; pruebe recargar la página en unos minutos.
+    </div>
+    {% else %}
+    {% if summary is defined %}
+    <section aria-labelledby="resumen-titulo">
+      <h2 id="resumen-titulo">Resumen de informes</h2>
+      <div class="stats">
+        {% for code, n in summary.items() %}
+        <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if to_sign is defined %}
+    <section aria-labelledby="firma-titulo">
+      <h2 id="firma-titulo">Informes cerrados pendientes de mi firma{% if to_sign_total %} <span class="count-pill">{{ to_sign_total }}</span>{% endif %}</h2>
+      {{ report_rows(to_sign, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='No hay informes cerrados pendientes de su firma.') }}
+      {% if to_sign_total > to_sign|length %}<p class="small"><a href="{{ url_for('consolidation.index', estado='CERRADO') }}">Ver todos los informes cerrados</a></p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if summary is defined %}
+    <section aria-labelledby="cerrados-titulo">
+      <h2 id="cerrados-titulo">Informes cerrados recientemente</h2>
+      {{ report_rows(recent_closed, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='Todavía no hay informes cerrados.') }}
+    </section>
+    <section aria-labelledby="correccion-titulo">
+      <h2 id="correccion-titulo">Reabiertos para corrección</h2>
+      {{ report_rows(in_correction, show_owner=true, empty='No hay informes en corrección.') }}
+    </section>
+    {% endif %}
+
+    {% if has_perm('module.reports') %}
+    <section aria-labelledby="mis-abiertos-titulo">
+      <h2 id="mis-abiertos-titulo">Mis informes en elaboración</h2>
+      {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
+    </section>
+    <section aria-labelledby="mis-cerrados-titulo">
+      <h2 id="mis-cerrados-titulo">Mis informes cerrados</h2>
+      {{ report_rows(closed_own, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados todavía.') }}
+    </section>
+    {% endif %}
+
+    {% if activity is defined %}
     <section class="activity-card" aria-labelledby="actividad-titulo">
       <div class="activity-head">
         <h2 id="actividad-titulo">Mi actividad</h2>
@@ -35,52 +79,6 @@
       </dl>
     </section>
     {% endif %}
-
-    {% if dashboard_unavailable %}
-    <div class="notice notice-info" role="status">
-      No se pudieron cargar todos los datos del panel. Los accesos rápidos siguen disponibles; pruebe recargar la página en unos minutos.
-    </div>
-    {% else %}
-    {% if to_sign is defined %}
-    <section>
-      <h2>Informes cerrados pendientes de mi firma{% if to_sign_total %} <span class="count-pill">{{ to_sign_total }}</span>{% endif %}</h2>
-      {{ report_rows(to_sign, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='No hay informes cerrados pendientes de su firma.') }}
-      {% if to_sign_total > to_sign|length %}<p class="small"><a href="{{ url_for('consolidation.index', estado='CERRADO') }}">Ver todos los informes cerrados</a></p>{% endif %}
-    </section>
-    {% endif %}
-    {% if summary is defined %}
-    <section>
-      <h2>Resumen de informes</h2>
-      <div class="stats">
-        {% for code, n in summary.items() %}
-        <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
-        {% endfor %}
-      </div>
-    </section>
-    <section>
-      <h2>Informes enviados recientemente</h2>
-      {{ report_rows(recent_sent, show_owner=true, date_label='Enviado', date_field='last_sent_at', empty='Todavía no se han recibido informes.') }}
-    </section>
-    <section>
-      <h2>Pendientes de revisión o en corrección</h2>
-      {{ report_rows(in_correction, show_owner=true, empty='No hay informes en corrección.') }}
-    </section>
-    {% endif %}
-
-    {% if has_perm('module.reports') %}
-    <section>
-      <h2>Mis informes en elaboración</h2>
-      {{ report_rows(drafts, empty='No tiene informes abiertos.') }}
-    </section>
-    <section>
-      <h2>Mis informes cerrados pendientes de envío</h2>
-      {{ report_rows(closed_pending, date_label='Cerrado', date_field='closed_at', empty='No tiene informes cerrados sin enviar.') }}
-    </section>
-    <section>
-      <h2>Mis informes enviados</h2>
-      {{ report_rows(sent_own, date_label='Enviado', date_field='last_sent_at', empty='No ha enviado informes todavía.') }}
-    </section>
-    {% endif %}
     {% endif %}
   </div>
 
@@ -88,11 +86,9 @@
     <section class="card">
       <h3>Accesos rápidos</h3>
       <div class="quick">
-        {% if has_perm('module.reports') %}<a class="btn" href="{{ url_for('reports.index') }}">Mis informes e importación Excel</a>{% endif %}
+        {% if has_perm('report.import') %}<a class="btn" href="{{ url_for('reports.index') }}">Importar matriz Excel</a>{% endif %}
         {% if has_perm('module.consolidation') %}<a class="btn" href="{{ url_for('consolidation.index', orden='marca') }}">Equipos por marca y serie</a>{% endif %}
         {% if has_perm('module.audit_log') %}<a class="btn" href="{{ url_for('logs.sessions') }}">Entradas y salidas de sesión</a>{% endif %}
-        {% if has_perm('dashboard.executive') %}<a class="btn" href="{{ url_for('dashboard.index') }}">Tablero ejecutivo</a>{% endif %}
-        {% if has_perm('users.manage') %}<a class="btn" href="{{ url_for('admin.users_index') }}">Usuarios y roles</a>{% endif %}
         {% if has_perm('report.delete') %}<a class="btn" href="{{ url_for('reports.deleted_index') }}">Informes eliminados</a>{% endif %}
         <a class="btn" href="{{ url_for('auth.change_password') }}">Cambiar mi contraseña</a>
       </div>
@@ -130,7 +126,8 @@
         <li>Cree un informe por equipo o importe una matriz Excel.</li>
         <li>Tome una foto clara de las características del equipo: el informe se autocompleta.</li>
         <li>Revise, firme y pulse <b>Guardar cambios</b>; puede seguir editando.</li>
-        <li><b>Cerrar informe</b> lo bloquea. Cualquier usuario puede reabrirlo indicando el motivo.</li>
+        <li><b>Cerrar informe</b> es el último paso: lo bloquea y lo deja listo para la firma del Director.</li>
+        <li>Si necesita corregirlo, reábralo indicando el motivo (si el Director ya lo firmó, solo él puede reabrirlo).</li>
       </ol>
     </section>
   </aside>

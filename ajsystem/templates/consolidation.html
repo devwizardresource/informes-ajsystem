@@ -8,19 +8,19 @@
   <div><label for="codigo">Identificador</label><input id="codigo" name="codigo" value="{{ filters.code }}" maxlength="40"></div>
   <div><label for="tecnico">Técnico</label>
     <select id="tecnico" name="tecnico"><option value="">Todos</option>
-      {% for o in owners %}<option value="{{ o.id }}" {% if filters.owner_id == o.id %}selected{% endif %}>{{ o.full_name }} ({{ o.username }})</option>{% endfor %}
+      {% for o in owners %}<option value="{{ o.id }}" {% if filters.owner_id == o.id %}selected{% endif %}>{{ o.full_name }} ({{ o.username }}){% if o.deleted %} · eliminado{% endif %}</option>{% endfor %}
     </select></div>
   <div><label for="marca">Marca</label><input id="marca" name="marca" value="{{ filters.brand }}" maxlength="100" list="marcas">
     <datalist id="marcas">{% for b in brands %}<option value="{{ b }}">{% endfor %}</datalist></div>
   <div><label for="serie">N.º de serie</label><input id="serie" name="serie" value="{{ filters.serial }}" maxlength="100"></div>
   <div><label for="estado">Estado</label>
     <select id="estado" name="estado"><option value="">Todos</option>
-      {% for code, label in STATUS_LABELS.items() %}<option value="{{ code }}" {% if filters.status == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      {% for code in ('EN_ELABORACION', 'REABIERTO', 'CERRADO') %}<option value="{{ code }}" {% if filters.status == code %}selected{% endif %}>{{ STATUS_LABELS[code] }}</option>{% endfor %}
     </select></div>
   <div><label for="fecha_por">Fecha por</label>
     <select id="fecha_por" name="fecha_por">
       <option value="created" {% if filters.date_field == 'created' %}selected{% endif %}>Creación</option>
-      <option value="sent" {% if filters.date_field == 'sent' %}selected{% endif %}>Último envío</option>
+      <option value="closed" {% if filters.date_field == 'closed' %}selected{% endif %}>Cierre</option>
     </select></div>
   <div><label for="orden">Ordenar por</label>
     <select id="orden" name="orden">
@@ -36,7 +36,7 @@
 <p class="muted">{{ total }} informe(s) encontrados.</p>
 <div class="table-wrap">
 <table class="table">
-  <thead><tr><th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca</th><th scope="col">N.º de serie</th><th scope="col">Técnico</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col">Cerrado</th><th scope="col">Último envío</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+  <thead><tr><th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca</th><th scope="col">N.º de serie</th><th scope="col">Técnico</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col">Cerrado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr>
@@ -48,12 +48,11 @@
       <td data-label="Estado">{{ status_badge(r.status_code) }}</td>
       <td data-label="Creado">{{ r.created_at|localdt }}</td>
       <td data-label="Cerrado">{{ r.closed_at|localdt }}</td>
-      <td data-label="Último envío">{{ r.last_sent_at|localdt }}</td>
       <td class="nowrap"><a class="btn btn-sm" href="{{ url_for('reports.detail', report_id=r.id) }}">Detalle</a>
         {% if has_perm('report.download') %}<a class="btn btn-sm btn-ghost" href="{{ url_for('reports.download', report_id=r.id) }}">PDF</a>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="10" class="muted">No hay informes con esos filtros.</td></tr>
+    <tr><td colspan="9" class="muted">No hay informes con esos filtros.</td></tr>
   {% endfor %}
   </tbody>
 </table>

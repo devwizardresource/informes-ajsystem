@@ -57,26 +57,30 @@ def test_reversion_si_falla_la_auditoria_durante_el_cierre(app, browser, make_us
     assert q("SELECT COUNT(*) AS n FROM report_versions WHERE report_id=%s", (rid,))[0]["n"] == rev
 
 
-def test_fallo_en_envio_mantiene_cerrado_y_permite_reintentar(app, browser, make_user, q, monkeypatch):
+def test_fallo_en_cierre_no_pierde_datos_y_permite_reintentar(app, browser, make_user, q, monkeypatch):
     b = browser(make_user("TECNICO"))
     rid = create_report(b)
-    fill(b, q, rid, accion="cerrar")
+    fill(b, q, rid, nombre="Datos guardados")
     original = audit.write
     calls = {"n": 0}
 
     def fail_once(cur, event_type, *a, **kw):
-        if event_type == audit.REPORT_SENT and calls["n"] == 0:
+        if event_type == audit.REPORT_CLOSED and calls["n"] == 0:
             calls["n"] += 1
-            raise RuntimeError("fallo simulado durante el envío")
+            raise RuntimeError("fallo simulado durante el cierre")
         return original(cur, event_type, *a, **kw)
 
     monkeypatch.setattr(audit, "write", fail_once)
-    op = new_op()
-    assert b.post(f"/informes/{rid}/enviar", {"op_id": op}).status_code == 500
+    rev = q("SELECT revision FROM reports WHERE id=%s", (rid,))[0]["revision"]
+    form = {"fecha": "2026-10-19", "nombre": "Datos guardados", "dispositivo": "Portátil", "marca": "Dell",
+            "numero_serie": "SN-001", "estado": "Activo", "disco": "Sin novedad", "accion": "cerrar",
+            "revision": rev, "op_id": new_op()}
+    assert b.post(f"/informes/{rid}/guardar", form, csrf_from=f"/informes/{rid}").status_code == 500
+    row = q("SELECT status_code, revision, title FROM reports WHERE id=%s", (rid,))[0]
+    assert row == {"status_code": "EN_ELABORACION", "revision": rev, "title": "Datos guardados"}  # todo revertido
+    assert b.post(f"/informes/{rid}/guardar", form, csrf_from=f"/informes/{rid}").status_code == 302  # reintento
     assert q("SELECT status_code FROM reports WHERE id=%s", (rid,))[0]["status_code"] == "CERRADO"
-    assert b.post(f"/informes/{rid}/enviar", {"op_id": op}).status_code == 302  # reintento
-    assert q("SELECT status_code FROM reports WHERE id=%s", (rid,))[0]["status_code"] == "ENVIADO"
-    assert q("SELECT COUNT(*) AS n FROM report_events WHERE report_id=%s AND action='ENVIAR'", (rid,))[0]["n"] == 1
+    assert q("SELECT COUNT(*) AS n FROM report_events WHERE report_id=%s AND action='CERRAR'", (rid,))[0]["n"] == 1
 
 
 def test_copia_y_restauracion(app, settings, browser, make_user, q, root_conn_factory, tmp_path):

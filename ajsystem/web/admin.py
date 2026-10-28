@@ -56,6 +56,21 @@ def users_status(user_id: int):
     return _run(users.set_active, user_id, request.form.get("activo") == "1", g.user, ok="Estado de la cuenta actualizado.")
 
 
+@bp.route("/usuarios/<int:user_id>/eliminar", methods=["POST"])
+@require_perm("users.manage")
+def users_delete(user_id: int):
+    if request.form.get("confirmar") != "ELIMINAR":
+        flash("Para eliminar la cuenta escriba ELIMINAR en la casilla de confirmación.", "error")
+        return redirect(url_for("admin.users_index"))
+    try:
+        username = users.delete_user(user_id, g.user)
+    except users.UserError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("admin.users_index"))
+    flash(f"Usuario {username} eliminado. Sus informes y su historial se conservan.", "success")
+    return redirect(url_for("admin.users_index"))
+
+
 @bp.route("/usuarios/<int:user_id>/identificacion", methods=["POST"])
 @require_perm("users.manage")
 def users_id_number(user_id: int):

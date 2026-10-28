@@ -54,8 +54,7 @@ def index():
     return render_template(
         "reports_index.html",
         drafts=service.list_own(user, (service.EN_ELABORACION, service.REABIERTO)),
-        closed=service.list_own(user, (service.CERRADO,)),
-        sent=service.list_own(user, (service.ENVIADO,), limit=50),
+        closed=service.list_own(user, (service.CERRADO, service.ENVIADO)),
     )
 
 
@@ -106,8 +105,8 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
     template = schema.effective_template(report["template_code"])
     values = form_values if form_values is not None else schema.data_for_template(report["template_code"], report["data"])
     pending = service.pending_request_for(report["id"])
-    caps = service.capabilities(report, g.user, pending)
     files = attachments.list_for(report["id"])
+    caps = service.capabilities(report, g.user, pending, signed=any(a["kind"] == "FIRMA_RECIBE" for a in files))
     signatures = {a["kind"]: url_for("reports.attachment_get", report_id=report["id"], public_id=a["public_id"])
                   for a in files if a["kind"] in attachments.SIGNATURES}
     if "FIRMA_ELABORA" not in signatures:
@@ -227,7 +226,7 @@ def save(report_id: int):
             result = service.close(report_id, g.user, request.form, request.form.get("revision"),
                                    request.form.get("op_id"))
             flash("La operación ya se había registrado." if result["already"]
-                  else "Informe cerrado y registrado. Ya puede enviarlo.", "success")
+                  else "Informe cerrado y registrado. Queda disponible para la firma del Director.", "success")
         else:
             result = service.save(report_id, g.user, request.form, request.form.get("revision"))
             flash(f"Cambios guardados (revisión {result['revision']}). El informe sigue abierto y puede seguir editándolo."
@@ -241,18 +240,6 @@ def save(report_id: int):
                 values = {field.id: request.form.get(field.id) for field in template.fields}
                 return _render_detail(report, form_values=values, errors=exc.field_errors, status=422)
         return _reject(exc, report_id, "cerrar" if action == "cerrar" else "guardar")
-    return redirect(url_for("reports.detail", report_id=report_id))
-
-
-@bp.route("/<int:report_id>/enviar", methods=["POST"])
-@login_required
-def send(report_id: int):
-    try:
-        result = service.send(report_id, g.user, request.form.get("op_id"))
-    except service.ReportError as exc:
-        return _reject(exc, report_id, "enviar")
-    flash("El envío ya se había registrado." if result["already"]
-          else "Informe enviado. Ya está disponible para el Director y el jefe.", "success")
     return redirect(url_for("reports.detail", report_id=report_id))
 
 

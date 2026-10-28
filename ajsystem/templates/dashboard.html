@@ -33,7 +33,7 @@
   <section aria-labelledby="kpi-t">
     <h2 id="kpi-t" class="sr-only">Indicadores clave</h2>
     <div class="kpis">
-      <div class="kpi"><span class="kpi-n">{{ k.reports }}</span><span class="kpi-l">Informes realizados</span><small>{{ k.closed }} cerrados o enviados · {{ k.closed_pct|pct }}</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.reports }}</span><span class="kpi-l">Informes realizados</span><small>{{ k.closed }} cerrados · {{ k.closed_pct|pct }}</small></div>
       <div class="kpi"><span class="kpi-n">{{ k.per_day|num(1) }}</span><span class="kpi-l">Promedio diario</span><small>{% if k.peak %}Pico: {{ k.peak.n }} el {{ k.peak.date[8:10] }}/{{ k.peak.date[5:7] }}{% else %}Sin informes en el periodo{% endif %}</small></div>
       <div class="kpi"><span class="kpi-n">{{ k.per_tech|num(1) }}</span><span class="kpi-l">Promedio por técnico</span><small>{{ k.techs_active }} de {{ k.techs_total }} técnico{{ '' if k.techs_total == 1 else 's' }} con actividad</small></div>
       <div class="kpi"><span class="kpi-n">{{ k.close_hours|duration }}</span><span class="kpi-l">Tiempo medio hasta cierre</span><small>Desde la creación, informes cerrados</small></div>
@@ -103,7 +103,7 @@
       <table class="table table-dense" data-sortable>
         <thead><tr>
           <th scope="col" data-sort="num">#</th><th scope="col" data-sort="text">Técnico</th><th scope="col" data-sort="num">Informes</th>
-          <th scope="col" data-sort="num">Cerrados</th><th scope="col" data-sort="num">Enviados</th><th scope="col" data-sort="num">Días activos</th>
+          <th scope="col" data-sort="num">Cerrados</th><th scope="col" data-sort="num">Firmados</th><th scope="col" data-sort="num">Días activos</th>
           <th scope="col" data-sort="num">Prom./día</th><th scope="col" data-sort="num">Prom./día activo</th><th scope="col" data-sort="num">Con fotos</th>
           <th scope="col" data-sort="num">Observ.</th><th scope="col" data-sort="num">Mal estado</th><th scope="col" data-sort="num">Tiempo a cierre</th><th scope="col" data-sort="text">Último informe</th>
         </tr></thead>
@@ -114,7 +114,7 @@
             <td data-label="Técnico"><a href="{{ url_for('dashboard.index', desde=date_from.isoformat(), hasta=date_to.isoformat(), tecnico=t.id) }}">{{ t.name }}</a></td>
             <td data-label="Informes" data-v="{{ t.n }}">{{ t.n }}</td>
             <td data-label="Cerrados" data-v="{{ t.closed }}">{{ t.closed }}</td>
-            <td data-label="Enviados" data-v="{{ t.sent }}">{{ t.sent }}</td>
+            <td data-label="Firmados" data-v="{{ t.signed }}">{{ t.signed }}</td>
             <td data-label="Días activos" data-v="{{ t.active_days }}">{{ t.active_days }}</td>
             <td data-label="Prom./día" data-v="{{ t.per_day if t.per_day is not none else -1 }}">{{ t.per_day|num(2) }}</td>
             <td data-label="Prom./día activo" data-v="{{ t.per_active_day if t.per_active_day is not none else -1 }}">{{ t.per_active_day|num(1) }}</td>

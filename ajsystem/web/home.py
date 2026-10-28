@@ -18,8 +18,7 @@ def index():
     user = g.user
     ctx = {
         "drafts": [],
-        "closed_pending": [],
-        "sent_own": [],
+        "closed_own": [],
         "dashboard_unavailable": False,
     }
     try:
@@ -27,7 +26,7 @@ def index():
         if has_perm("report.view_sent") or has_perm("report.view_all"):
             ctx.update(
                 summary=service.summary(user),
-                recent_sent=service.recent_sent(user),
+                recent_closed=service.recent_closed(user),
                 in_correction=service.in_correction(user),
                 requests=service.pending_requests(user),
             )

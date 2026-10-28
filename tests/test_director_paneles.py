@@ -58,9 +58,10 @@ def test_director_firma_informe_cerrado_con_su_firma_de_perfil(browser, make_use
     assert len(rows) == 2 and sum(r["deleted_at"] is None for r in rows) == 1
 
 
-def test_director_carga_imagen_de_firma_en_informe_enviado(browser, make_user, q):
-    _t, bt, rid = _closed_report(browser, make_user, q)
-    assert bt.post(f"/informes/{rid}/enviar", {"op_id": "a" * 32}, csrf_from=f"/informes/{rid}").status_code == 302
+def test_director_carga_imagen_de_firma_en_informe_enviado_antiguo(browser, make_user, q):
+    t, _bt, rid = _closed_report(browser, make_user, q)
+    q("UPDATE reports SET status_code = 'ENVIADO', first_sent_at = closed_at, last_sent_at = closed_at, "
+      "last_sent_by = %s WHERE id = %s", (t["id"], rid))
     bd = browser(make_user("RESPONSABLE"))
     r = upload(bd, rid, _jpeg(), kind="FIRMA_RECIBE", name="firma.png")
     assert r.status_code == 201, r.get_data(as_text=True)
