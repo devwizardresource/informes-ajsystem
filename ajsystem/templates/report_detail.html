@@ -93,7 +93,8 @@
       data-upload-url="{{ url_for('reports.attachment_add', report_id=report.id) }}"
       data-autofill-url="{{ url_for('reports.autofill', report_id=report.id) }}"
       data-ocr-base="{{ url_for('static', filename='vendor/tesseract/') }}"
-      data-csrf="{{ csrf_token() }}">
+      data-csrf="{{ csrf_token() }}"
+      {% if editable %}data-draft-key="ajs-borrador-{{ g.user.id }}-{{ report.id }}" data-heartbeat-url="{{ url_for('auth.heartbeat') }}"{% endif %}>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="revision" value="{{ report.revision }}">
   <input type="hidden" name="op_id" value="{{ new_op_id() }}">

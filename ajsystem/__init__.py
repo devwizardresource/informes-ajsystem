@@ -6,9 +6,10 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
-from flask import Flask, Response, g, redirect, render_template, request, url_for
+from flask import Flask, Response, flash, g, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 
 from . import audit, db
@@ -19,7 +20,7 @@ from .security import csrf, sessions
 from .security.authz import has_perm
 
 # Browser-facing assets are cached for a year; bump this token when they change.
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 ERROR_MESSAGES = {
     400: "La solicitud no es válida. Recargue la página e inténtelo de nuevo.",
@@ -94,8 +95,21 @@ def create_app(overrides: dict | None = None) -> Flask:
             request.max_content_length = 16 * 1024 * 1024
         sessions.load_current_session()
         if not csrf.is_valid():
+            expired = g.get("user") is None and bool(request.cookies.get(settings.cookie_name))
             audit.write_standalone(audit.CSRF_FAILED, "DENEGADO",
-                                   detail={"ruta": request.path[:200], "metodo": request.method})
+                                   detail={"ruta": request.path[:200], "metodo": request.method,
+                                           **({"motivo": "sesión caducada"} if expired else {})})
+            if expired:
+                # La sesión caducó con un formulario abierto: no se ejecuta nada, se pide iniciar sesión y
+                # se vuelve a la página de origen, donde el navegador recupera el borrador sin guardar.
+                if "application/json" in request.headers.get("Accept", ""):
+                    return {"error": "Su sesión caducó. Inicie sesión de nuevo; sus cambios sin guardar "
+                                     "se conservan en este navegador."}, 401
+                flash("Su sesión caducó antes de guardar. Inicie sesión de nuevo: los cambios que escribió "
+                      "se recuperan al volver al informe.", "info")
+                ref = urlsplit(request.referrer or "")
+                back = ref.path if ref.netloc == request.host and ref.path.startswith("/") else None
+                return redirect(url_for("auth.login", next=back) if back else url_for("auth.login"), code=303)
             return render_template("error.html", code=400, message=ERROR_MESSAGES[400]), 400
         user = g.get("user")
         if user and user["must_change_password"] and request.endpoint not in ("auth.change_password", "auth.logout"):

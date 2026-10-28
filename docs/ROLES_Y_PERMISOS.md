@@ -47,6 +47,7 @@ Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la
 - La **edición** solo es posible en estado EN_ELABORACION o REABIERTO; el técnico edita los suyos y la dirección cualquiera (`report.edit_any`).
 - **Cerrar es el último paso** (el paso «Enviar» se retiró el 2026-10-28): el informe queda bloqueado y pendiente de la firma del Director. Los informes antiguos en estado ENVIADO se muestran y se filtran como «Cerrado»; no se modificó ningún dato.
 - La **reapertura** requiere `report.reopen`, un informe cerrado visible y un motivo. Si el Director ya lo firmó, solo el Director puede reabrirlo y su firma se retira (queda en el historial) para que vuelva a firmar la versión corregida.
+- **Protección de lo escrito** (desde la versión 1.4.1): mientras se edita, la hoja se copia en el navegador (borrador local) y la sesión se mantiene activa si hay actividad. Si la sesión caduca, se pierde la conexión o el guardado es rechazado, al iniciar sesión se vuelve al informe y los cambios se recuperan; nada se registra hasta pulsar «Guardar cambios». Si otra persona guardó entretanto, se ofrece recuperar en vez de reemplazar.
 - «Guardar cambios» conserva el informe abierto. «Cerrar informe» lo bloquea (también en la base de datos, incluidos sus adjuntos).
 - Los informes se listan en **orden cronológico** y la Consolidación permite ordenarlos por **marca y número de serie**.
 

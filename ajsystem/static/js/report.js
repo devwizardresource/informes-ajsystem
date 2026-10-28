@@ -103,6 +103,118 @@
   refreshChoices();
   refreshConditionalFields();
 
+  // ---------------------------------------------------------------- borrador local y sesión activa
+  // Lo escrito se copia en este navegador mientras no se guarda. Si la sesión caduca, se pierde la
+  // conexión o el guardado es rechazado, al volver al informe se recupera; nunca se guarda solo.
+  var DRAFT_KEY = form.getAttribute("data-draft-key");
+  var HEARTBEAT_URL = form.getAttribute("data-heartbeat-url");
+  var revisionInput = form.querySelector('input[name="revision"]');
+  var REVISION = revisionInput ? revisionInput.value : "";
+
+  function fieldsSnapshot() {
+    var v = {};
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.type === "hidden" || el.type === "file" || el.type === "submit" || el.type === "button") return;
+      if (el.type === "radio") { if (!(el.name in v)) v[el.name] = ""; if (el.checked) v[el.name] = el.value; }
+      else if (el.type === "checkbox") v[el.name] = el.checked;
+      else v[el.name] = el.value;
+    });
+    return v;
+  }
+
+  function applySnapshot(v) {
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || !(el.name in v) || el.type === "hidden" || el.type === "file") return;
+      if (el.type === "radio") el.checked = el.value === v[el.name];
+      else if (el.type === "checkbox") el.checked = !!v[el.name];
+      else el.value = v[el.name];
+    });
+    refreshChoices(); refreshConditionalFields(); markDirty();
+  }
+
+  function sameSnapshot(a, b) {
+    return Object.keys(a).concat(Object.keys(b)).every(function (k) { return String(a[k]) === String(b[k]); });
+  }
+
+  function readDraft() {
+    try { return JSON.parse(window.localStorage.getItem(DRAFT_KEY) || "null"); } catch (_) { return null; }
+  }
+  function dropDraft() { try { window.localStorage.removeItem(DRAFT_KEY); } catch (_) {} }
+
+  if (DRAFT_KEY) {
+    var initial = fieldsSnapshot();
+    var draft = readDraft();
+    if (draft && draft.v && !sameSnapshot(draft.v, initial)) {
+      var when = new Date(draft.at).toLocaleString();
+      var note = document.createElement("div");
+      note.className = "notice draft-notice";
+      note.setAttribute("role", "status");
+      var text = document.createElement("p");
+      var restore = document.createElement("button"), discard = document.createElement("button");
+      restore.type = discard.type = "button";
+      restore.className = "btn"; discard.className = "btn ghost";
+      restore.textContent = "Recuperar mis cambios"; discard.textContent = "Descartar";
+      var applied = false;
+      discard.addEventListener("click", function () {
+        if (!window.confirm("¿Descartar los cambios sin guardar del " + when + "?")) return;
+        dropDraft();
+        if (applied) window.location.reload(); else note.remove();
+      });
+      restore.addEventListener("click", function () {
+        applySnapshot(draft.v); applied = true;
+        text.textContent = "Cambios recuperados. Revíselos y pulse «Guardar cambios» para registrarlos.";
+        restore.remove(); discard.remove();
+      });
+      if (String(draft.rev) === REVISION) {
+        // Misma versión del informe: se restaura de inmediato (no se pisa el trabajo de nadie).
+        applySnapshot(draft.v); applied = true;
+        text.textContent = "Se recuperaron cambios sin guardar del " + when +
+          ". Revíselos y pulse «Guardar cambios» para registrarlos.";
+        note.appendChild(text); note.appendChild(discard);
+        discard.textContent = "Descartar y ver lo guardado";
+      } else {
+        text.textContent = "Hay cambios sin guardar del " + when + " hechos sobre una versión anterior del informe" +
+          " (alguien lo guardó después). Si los recupera, reemplazan lo que se ve en la hoja.";
+        note.appendChild(text); note.appendChild(restore); note.appendChild(discard);
+      }
+      form.parentNode.insertBefore(note, form);
+    } else if (draft) {
+      dropDraft();  // lo guardado ya coincide con el borrador
+    }
+
+    var draftTimer = null;
+    function storeDraft() {
+      draftTimer = null;
+      try {
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ rev: REVISION, at: Date.now(), v: fieldsSnapshot() }));
+      } catch (_) {}
+    }
+    function scheduleDraft() { if (!draftTimer) draftTimer = window.setTimeout(storeDraft, 400); }
+    form.addEventListener("input", scheduleDraft);
+    form.addEventListener("change", scheduleDraft);
+    form.addEventListener("submit", function () { if (draftTimer) { window.clearTimeout(draftTimer); storeDraft(); } });
+    window.addEventListener("pagehide", function () { if (draftTimer) { window.clearTimeout(draftTimer); storeDraft(); } });
+  }
+
+  if (HEARTBEAT_URL) {
+    // Mientras se escribe, la sesión no caduca por inactividad; si se deja de usar, caduca como siempre.
+    var lastActivity = Date.now(), warned = false;
+    ["input", "change", "pointerdown", "keydown"].forEach(function (t) {
+      form.addEventListener(t, function () { lastActivity = Date.now(); }, { passive: true });
+    });
+    window.setInterval(function () {
+      if (Date.now() - lastActivity > 5 * 60 * 1000) return;
+      fetch(HEARTBEAT_URL, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) {
+          if (r.status === 401 && !warned) {
+            warned = true;
+            window.alert("Su sesión caducó. Lo que escribió está protegido en este navegador: " +
+              "pulse «Guardar cambios», inicie sesión y volverá al informe para recuperarlo.");
+          }
+        }).catch(function () {});
+    }, 4 * 60 * 1000);
+  }
+
   // ---------------------------------------------------------------- OCR (carga diferida)
   var workerPromise = null;
   function loadScript(src) {

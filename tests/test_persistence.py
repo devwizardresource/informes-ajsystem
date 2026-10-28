@@ -1,5 +1,6 @@
 """Persistencia: reinicio, transacciones/reversiones y copias de seguridad."""
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -191,3 +192,57 @@ def test_error_con_plantilla_rota_no_deja_la_pagina_en_blanco(app, browser, make
     body = r.get_data(as_text=True)
     assert r.status_code == 500 and r.mimetype == "text/html"
     assert "Error 500" in body and "Volver al inicio" in body
+
+
+def _expire_sessions(root_conn_factory, user_id):
+    conn = root_conn_factory()
+    with conn.cursor() as cur:
+        cur.execute("UPDATE sessions SET last_seen_at = last_seen_at - INTERVAL 2 HOUR WHERE user_id = %s AND ended_at IS NULL",
+                    (user_id,))
+    conn.close()
+
+
+def test_guardar_con_sesion_caducada_vuelve_al_informe_sin_tocar_datos(app, browser, make_user, q, root_conn_factory):
+    t = make_user("TECNICO")
+    b = browser(t)
+    rid = create_report(b)
+    assert fill(b, q, rid, nombre="Primera versión").status_code == 302
+    token = b.csrf(f"/informes/{rid}")
+    revision = q("SELECT revision FROM reports WHERE id = %s", (rid,))[0]["revision"]
+    _expire_sessions(root_conn_factory, t["id"])
+    r = b.client.post(f"/informes/{rid}/guardar", headers={"Referer": f"http://localhost/informes/{rid}"},
+                      data={"csrf_token": token, "accion": "guardar", "revision": revision, "nombre": "Perdido"})
+    # Antes: error 400 genérico y lo escrito se perdía. Ahora: a iniciar sesión y de vuelta al informe.
+    assert r.status_code == 303
+    assert "/login" in r.headers["Location"] and f"next=/informes/{rid}" in r.headers["Location"]
+    row = q("SELECT revision, JSON_UNQUOTE(JSON_EXTRACT(data, '$.nombre')) AS nombre FROM reports WHERE id = %s", (rid,))[0]
+    assert row["revision"] == revision and row["nombre"] == "Primera versión"
+    login_page = b.get(r.headers["Location"]).get_data(as_text=True)
+    assert f'value="/informes/{rid}"' in login_page
+    token = re.search(r'name="csrf_token" value="([0-9a-f]+)"', login_page).group(1)
+    r = b.client.post("/login", data={"username": t["username"], "password": t["password"],
+                                      "csrf_token": token, "next": f"/informes/{rid}"})
+    assert r.status_code == 302 and r.headers["Location"].endswith(f"/informes/{rid}")
+
+
+def test_latido_mantiene_la_sesion_y_detecta_la_caducidad(browser, make_user, root_conn_factory):
+    t = make_user("TECNICO")
+    b = browser(t)
+    r = b.get("/sesion/latido", headers={"Accept": "application/json"})
+    assert r.status_code == 200 and r.get_json() == {"activa": True}
+    _expire_sessions(root_conn_factory, t["id"])
+    r = b.get("/sesion/latido", headers={"Accept": "application/json"})
+    assert r.status_code == 401 and r.get_json() == {"activa": False}
+
+
+def test_el_tecnico_consulta_todos_sus_informes(browser, make_user, q):
+    t = make_user("TECNICO")
+    b = browser(t)
+    abiertos = [create_report(b) for _ in range(2)]
+    cerrado = create_report(b)
+    assert fill(b, q, cerrado, accion="cerrar").status_code == 302
+    html = b.get("/informes").get_data(as_text=True)
+    for rid in abiertos + [cerrado]:
+        code = q("SELECT code FROM reports WHERE id = %s", (rid,))[0]["code"]
+        assert code in html
+        assert b.get(f"/informes/{rid}").status_code == 200

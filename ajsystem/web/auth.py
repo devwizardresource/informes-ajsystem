@@ -97,6 +97,15 @@ def login():
     return response
 
 
+@bp.route("/sesion/latido")
+def heartbeat():
+    """Mantiene viva la sesión mientras la persona escribe en un informe (report.js solo lo llama si hay
+    actividad reciente). Sin sesión responde 401 en vez de redirigir, para que el navegador lo detecte."""
+    if not g.get("user"):
+        return {"activa": False}, 401
+    return {"activa": True}
+
+
 @bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
