@@ -7,7 +7,7 @@ import re
 from flask import (Blueprint, Response, current_app, flash, g, jsonify, redirect, render_template, request,
                    url_for)
 
-from .. import audit, db, documents, users
+from .. import analytics, audit, db, documents, users
 from ..reports import attachments, extract, importer, schema, service, sheet
 from ..security.authz import deny, has_perm, login_required, require_perm
 
@@ -315,6 +315,40 @@ def sign_closed(report_id: int):
         return _reject(exc, report_id, "firmar como Director")
     flash("Informe firmado como Director.", "success")
     return redirect(url_for("reports.detail", report_id=report_id))
+
+
+@bp.route("/por-firmar")
+@require_perm("report.sign_closed")
+def to_sign():
+    """Todos los informes cerrados pendientes de la firma del Director, para firmarlos en lote."""
+    rows, total = analytics.pending_signature(limit=attachments.MAX_BATCH_SIGN)
+    return render_template("reports_to_sign.html", rows=rows, total=total,
+                           has_profile_signature=users.signature_for(g.user["id"]) is not None)
+
+
+@bp.route("/firmar-lote", methods=["POST"])
+@require_perm("report.sign_closed")
+def sign_batch():
+    """Firma en cadena: todos los pendientes («todos») o solo los informes marcados («seleccionados»)."""
+    back = url_for("home.index") if request.form.get("volver") == "inicio" else url_for("reports.to_sign")
+    ids = None
+    if request.form.get("modo") != "todos":
+        ids = [int(v) for v in request.form.getlist("ids") if v.isdigit() and len(v) <= 12]
+    try:
+        result = attachments.sign_many(g.user, ids)
+    except service.ReportError as exc:
+        audit.write_standalone(audit.REPORTS_SIGNED, "FALLO", object_type="firma_lote",
+                               detail={"motivo": exc.message, "codigo": exc.code})
+        flash(exc.message, "error")
+        return redirect(back)
+    n, skipped = len(result["signed"]), result["skipped"]
+    if n:
+        flash(f"Se firmaron {n} informe{'' if n == 1 else 's'} como Director"
+              f"{f' ({skipped} omitido' + ('' if skipped == 1 else 's') + ': ya firmados o no cerrados)' if skipped else ''}.",
+              "success")
+    else:
+        flash("No había informes cerrados pendientes de firma entre los indicados.", "info")
+    return redirect(back)
 
 
 @bp.route("/<int:report_id>/adjuntos/<public_id>")

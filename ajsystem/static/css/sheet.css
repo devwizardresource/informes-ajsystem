@@ -39,6 +39,9 @@ body, button, input, textarea, select { font-family: "Ubuntu Sans", "Segoe UI", 
 .sheet .check-value { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 500; cursor: pointer; }
 .sheet .check-static { font-weight: 600; color: #4c2483; }
 .sheet tr[data-conditional-field][hidden] { display: none; }
+/* Firmas más grandes que en la plantilla original (0,52 in): el trazo se ve legible. */
+.sheet .sig .pad { height: .95in; }
+.sheet .sig .pad img { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
 .sheet .sig .tools .status { font-size: 7.6pt; color: var(--muted); align-self: center; }
 .sheet .sig.readonly .pad { border: 0; background: none; cursor: default; }
 .sheet .sig-profile-hint { margin: 3px 0 0; text-align: center; font-size: 7.8pt; }
@@ -77,6 +80,8 @@ body, button, input, textarea, select { font-family: "Ubuntu Sans", "Segoe UI", 
 .badge-cerrado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
 .badge-enviado { background: #e9f7ef; color: #157a46; border-color: #9fd3b0; }
 .badge-reabierto { background: #f6e9fb; color: #6a1b8a; border-color: #d3a8e6; }
+.badge-firmado { background: #e3f6ea; color: #157a46; border-color: #7cc898; }
+.badge-firmado::before { content: "✓ "; }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .gallery figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }

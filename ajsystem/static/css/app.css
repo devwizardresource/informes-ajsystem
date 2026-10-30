@@ -169,6 +169,8 @@ legend { font-weight: 700; padding: 0 6px; }
 .badge-en_elaboracion { background: #eef6ff; color: #23408e; border-color: #a9c3ea; }
 .badge-cerrado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
 .badge-reabierto { background: #f6e9fb; color: #6a1b8a; border-color: #d3a8e6; }
+.badge-firmado { background: #e3f6ea; color: var(--ok); border-color: #7cc898; }
+.badge-firmado::before { content: "✓ "; }
 .badge-out-exito { background: #e9f7ef; color: var(--ok); border-color: #9fd3b0; }
 .badge-out-fallo, .badge-out-error { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
 .badge-out-denegado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
@@ -178,6 +180,12 @@ legend { font-weight: 700; padding: 0 6px; }
 .stat::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--grad); opacity: .8; }
 .stat-n { font-size: 1.8rem; font-weight: 800; }
 .stat-l { color: var(--muted); }
+.stat-firmado { border-color: #9fd3b0; background: #f2fbf5; }
+.stat-firmado .stat-n { color: var(--ok); }
+.stat-firmado::after { background: linear-gradient(90deg, #3ccf7a, var(--ok)); }
+.sign-batch { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
+.col-check { width: 2.4rem; text-align: center; }
+.col-check input { width: 1.1rem; height: 1.1rem; cursor: pointer; }
 
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .table { width: 100%; border-collapse: collapse; }
@@ -276,6 +284,8 @@ legend { font-weight: 700; padding: 0 6px; }
 .kpi::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--grad); }
 .kpi.is-warn::after { background: linear-gradient(90deg, #ffb35c, var(--warn)); }
 .kpi.is-accent::after { background: linear-gradient(90deg, var(--violet), #ff5ca8); }
+.kpi.is-ok::after { background: linear-gradient(90deg, #3ccf7a, var(--ok)); }
+.kpi small a { color: #8fe3ff; }
 .kpi-n { font-size: 1.75rem; font-weight: 800; line-height: 1.15; }
 .kpi-l { font-weight: 600; color: #d6ddef; }
 .kpi small { color: #9aa6c4; margin-top: 4px; font-size: .78rem; }
@@ -318,6 +328,7 @@ legend { font-weight: 700; padding: 0 6px; }
 .s-en_elaboracion { stroke: #1e9ccc; background: #1e9ccc; }
 .s-reabierto { stroke: #b45cff; background: #b45cff; }
 .s-cerrado { stroke: #f0a23c; background: #f0a23c; }
+.s-firmado { stroke: #2fb36a; background: #2fb36a; }
 .exec-details summary { cursor: pointer; list-style: none; }
 .exec-details summary::-webkit-details-marker { display: none; }
 .exec-details summary h2 { display: inline-flex; gap: 8px; align-items: center; margin: 0; }

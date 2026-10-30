@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install --require-hashes --only-binary :all: --no-deps -r requirements.lock
-          .venv/bin/pip install pip-audit==2.10.1 uv==0.12.22
+          .venv/bin/pip install pip-audit==2.10.1 uv==0.13.6
       - name: Auditoría (pip-audit, npm audit, lock e integridad SHA-256)
         run: bash scripts/security_audit.sh
 

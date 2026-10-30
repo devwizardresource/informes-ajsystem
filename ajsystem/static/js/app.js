@@ -98,6 +98,24 @@
     });
   });
 
+  // Casilla «Seleccionar todos» (firma en lote): marca o desmarca las casillas con el mismo nombre
+  document.querySelectorAll("input[data-check-all]").forEach(function (all) {
+    var form = all.getAttribute("form");
+    var boxes = document.querySelectorAll('input[type=checkbox][name="' + all.getAttribute("data-check-all") +
+                                          '"][form="' + form + '"]');
+    all.addEventListener("change", function () {
+      boxes.forEach(function (b) { b.checked = all.checked; });
+    });
+    boxes.forEach(function (b) {
+      b.addEventListener("change", function () {
+        var n = 0;
+        boxes.forEach(function (o) { if (o.checked) n++; });
+        all.checked = n === boxes.length;
+        all.indeterminate = n > 0 && n < boxes.length;
+      });
+    });
+  });
+
   // Gráficas: información emergente para cualquier marca con data-tip (texto plano, nunca HTML)
   var tip = null;
   function showTip(target, x, y) {

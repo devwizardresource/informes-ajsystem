@@ -5,10 +5,10 @@ import datetime as dt
 import math
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, current_app, g, render_template, request
+from flask import Blueprint, Response, current_app, g, render_template, request
 
-from .. import users
-from ..reports import service
+from .. import audit, users
+from ..reports import export, service
 from ..security.authz import require_perm
 
 bp = Blueprint("consolidation", __name__, url_prefix="/consolidacion")
@@ -33,9 +33,8 @@ def page_number() -> int:
         return 1
 
 
-@bp.route("")
-@require_perm("module.consolidation")
-def index():
+def _filters() -> dict:
+    """Filtros de la consulta (lista y exportación), validados contra listas blancas."""
     settings = current_app.config["AJS_SETTINGS"]
     args = request.args
     filters = {
@@ -56,9 +55,37 @@ def index():
         filters["owner_id"] = None
     filters["from_utc"] = local_date_to_utc(filters["desde"], settings.timezone)
     filters["to_utc"] = local_date_to_utc(filters["hasta"], settings.timezone, end=True)
+    return filters
 
+
+@bp.route("")
+@require_perm("module.consolidation")
+def index():
+    settings = current_app.config["AJS_SETTINGS"]
+    filters = _filters()
     page = page_number()
     rows, total = service.search(g.user, filters, page, settings.page_size)
     pages = max(1, math.ceil(total / settings.page_size))
     return render_template("consolidation.html", rows=rows, total=total, page=page, pages=pages,
                            filters=filters, owners=users.technicians_and_owners(), brands=service.brands(g.user))
+
+
+@bp.route("/exportar.xlsx")
+@require_perm("module.consolidation")
+def export_xlsx():
+    """Libro Excel con un informe por fila (por consecutivo AJ-…), con los mismos filtros de la consulta."""
+    settings = current_app.config["AJS_SETTINGS"]
+    filters = _filters()
+    rows, truncated = service.export_rows(g.user, filters)
+    content = export.workbook(rows, current_app.config["AJS_REPORT_TEMPLATE"], settings.timezone, truncated)
+    # La exportación se registra antes de entregar el archivo; si el registro falla, no se entrega.
+    audit.write_standalone(audit.REPORTS_EXPORTED, "EXITO", object_type="exportacion", object_id="xlsx",
+                           detail={"informes": len(rows), "truncado": truncated,
+                                   "primero": rows[0]["code"] if rows else None,
+                                   "ultimo": rows[-1]["code"] if rows else None,
+                                   "filtros": {k: v for k, v in filters.items()
+                                               if v and k not in ("from_utc", "to_utc")}})
+    stamp = dt.datetime.now(ZoneInfo(settings.timezone)).strftime("%Y%m%d_%H%M")
+    return Response(content, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="informes_AJ_System_{stamp}.xlsx"',
+                             "Cache-Control": "no-store"})

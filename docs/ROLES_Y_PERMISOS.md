@@ -66,6 +66,10 @@ Las invitaciones de primer acceso se preparan en **Usuarios → Invitar por What
 
 Al cerrarse, un informe aparece en **Inicio → Informes cerrados pendientes de mi firma**. El Director lo firma con la firma guardada en **Mi perfil**: pulsa **Firmar** (la firma aparece en «Firma digital de quien recibe / aprueba», todavía sin guardar) y luego **Guardar cambios**. También puede dibujarla o cargar una imagen en ese recuadro. Solo esa firma se admite con el informe cerrado: el contenido, las fotos y la firma de quien elabora siguen bloqueados, también en la base de datos (disparadores de la migración 0007). Firmar no cambia la revisión ni la huella del informe; reemplazar la firma retira la anterior de forma lógica (queda en el historial) y todo queda en la auditoría (`ADJUNTO_AGREGADO`).
 
+**Firma en lote** (desde la versión 1.5.0): en Inicio o en **Informes pendientes de mi firma** (`/informes/por-firmar`) el Director marca los informes que quiere firmar y pulsa **Firmar seleccionados**, o pulsa **Firmar todos los pendientes** para firmarlos en cadena (hasta 500 por operación). Se usa la firma de su perfil, en una sola transacción (todos o ninguno), y nunca se reemplaza una firma que ya existía, así que repetir la operación no cambia nada. Cada informe queda con su `ADJUNTO_AGREGADO` y la operación con un `INFORMES_FIRMADOS_EN_LOTE`. Un informe cerrado con la firma vigente del Director se muestra en verde como **Firmado** (en listas, resumen, consolidación y tablero); «Firmado» no es un estado guardado en la base de datos y, si el informe se reabre, vuelve a ser «Reabierto».
+
+**Exportación a Excel**: en Consolidación, **Exportar a Excel (.xlsx)** descarga los informes que cumplen los filtros, uno por fila y ordenados por consecutivo (AJ-…), con su estado, firma del Director, técnico, fechas y todos los campos del formato (hasta 20 000 por archivo). Queda registrado como `INFORMES_EXPORTADOS`.
+
 ## Panel de actividad y tablero ejecutivo
 
 - **Mi actividad** (técnico, en Inicio): calendario de 53 semanas con los informes que el propio técnico creó cada día. La consulta se filtra por el usuario de la sesión; no admite parámetros.

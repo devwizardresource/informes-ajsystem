@@ -41,7 +41,8 @@
       <div class="kpi is-warn"><span class="kpi-n">{{ k.bad }}</span><span class="kpi-l">Equipos en mal estado</span><small>En reparación u obsoletos{% if k.condition_missing %} · {{ k.condition_missing }} sin estado registrado{% endif %}</small></div>
       <div class="kpi"><span class="kpi-n">{{ k.with_obs }}</span><span class="kpi-l">Equipos con observaciones</span><small>Observaciones adicionales diligenciadas</small></div>
       <div class="kpi"><span class="kpi-n">{{ k.with_photos }}</span><span class="kpi-l">Equipos con fotografías</span><small>{{ k.with_photos_pct|pct }} del inventario · {{ k.photos_total }} foto{{ '' if k.photos_total == 1 else 's' }}</small></div>
-      <div class="kpi is-accent"><span class="kpi-n">{{ k.pending_signature }}</span><span class="kpi-l">Pendientes de firma</span><small>Cerrados sin firma del Director</small></div>
+      <div class="kpi is-accent"><span class="kpi-n">{{ k.pending_signature }}</span><span class="kpi-l">Pendientes de firma</span><small>Cerrados sin firma del Director{% if k.pending_signature and has_perm('report.sign_closed') %} · <a href="{{ url_for('reports.to_sign') }}">firmar</a>{% endif %}</small></div>
+      <div class="kpi is-ok"><span class="kpi-n">{{ k.signed }}</span><span class="kpi-l">Firmados por el Director</span><small>{{ k.signed_pct|pct }} de los cerrados</small></div>
     </div>
   </section>
 
@@ -152,7 +153,7 @@
             <td data-label="Técnico">{{ e.owner_name }}</td>
             <td data-label="Estado del equipo">{{ e.estado or 'Sin dato' }}</td>
             <td data-label="Fotos" data-v="{{ e.fotos }}">{{ e.fotos }}</td>
-            <td data-label="Estado del informe">{{ status_badge(e.status_code) }}</td>
+            <td data-label="Estado del informe">{{ status_badge(e.status_code, e.signed) }}</td>
             <td data-label="Creado" class="nowrap">{{ e.created_at|localdt }}</td>
             {% if key == 'with_obs' %}<td data-label="Observaciones" class="pre">{{ e.observaciones|truncate(160) }}</td>{% endif %}
           </tr>

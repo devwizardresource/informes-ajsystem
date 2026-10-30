@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from zoneinfo import ZoneInfo
 
 from . import db
-from .reports.service import CERRADO, CLOSED, EN_ELABORACION, ENVIADO, REABIERTO, STATUS_LABELS
+from .reports.service import CERRADO, CLOSED, EN_ELABORACION, ENVIADO, FIRMADO, REABIERTO, STATUS_LABELS
 
 MONTHS = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 WEEKDAYS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
@@ -111,7 +111,7 @@ def pending_signature(limit: int = 15) -> tuple[list[dict], int]:
     total = db.query_one("SELECT COUNT(*) AS n" + _PENDING_SIGNATURE, (CERRADO, ENVIADO))["n"]
     rows = db.query_all(
         """SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.closed_at,
-                  r.reopen_count, o.full_name AS owner_name""" + _PENDING_SIGNATURE +
+                  r.reopen_count, o.full_name AS owner_name, 0 AS signed""" + _PENDING_SIGNATURE +
         " ORDER BY r.closed_at DESC, r.id DESC LIMIT %s", (CERRADO, ENVIADO, limit))
     return rows, total
 
@@ -143,11 +143,27 @@ def _mean(values):
     return sum(values) / len(values) if values else None
 
 
+def _brand_key(value: str | None) -> str:
+    """Clave de una marca sin distinguir mayúsculas ni espacios: «HP», «Hp» y « hp » son la misma."""
+    return " ".join((value or "").split()).casefold()
+
+
+def normalize_brands(values: list[str | None]) -> list[str | None]:
+    """Unifica la escritura de cada marca con su forma más usada (empate: la de más mayúsculas)."""
+    variants: dict[str, Counter] = defaultdict(Counter)
+    for v in values:
+        if _brand_key(v):
+            variants[_brand_key(v)][" ".join(v.split())] += 1
+    label = {key: max(c.items(), key=lambda kv: (kv[1], sum(ch.isupper() for ch in kv[0]), kv[0]))[0]
+             for key, c in variants.items()}
+    return [label.get(_brand_key(v)) for v in values]
+
+
 def _equipment_key(row: dict) -> str:
     serial = (row["equipment_serial"] or "").strip().upper()
     if not serial:
         return f"informe:{row['id']}"  # sin número de serie no se puede saber si es el mismo equipo
-    return f"{(row['equipment_brand'] or '').strip().upper()}|{serial}"
+    return f"{_brand_key(row['equipment_brand']).upper()}|{serial}"
 
 
 def _distribution(values: list[str | None], top: int | None = None) -> list[dict]:
@@ -258,12 +274,16 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
     equipment = list(latest.values())
     no_serial = sum(1 for k in latest if k.startswith("informe:"))
 
-    statuses = Counter(r["status_code"] for r in rows)
-    statuses[CERRADO] += statuses.pop(ENVIADO, 0)  # los informes «enviados» antiguos cuentan como cerrados
-    status_dist = [{"code": code, "label": STATUS_LABELS[code], "n": statuses.get(code, 0),
-                    "pct": _ratio(statuses.get(code, 0), len(rows))}
-                   for code in (EN_ELABORACION, REABIERTO, CERRADO)]
+    # Los informes «enviados» antiguos cuentan como cerrados; los cerrados con firma del Director, como firmados.
+    statuses = Counter((FIRMADO if r["firmado"] else CERRADO) if r["status_code"] in CLOSED else r["status_code"]
+                       for r in rows)
+    status_dist = [{"code": code, "label": "Cerrado (pendiente de firma)" if code == CERRADO else STATUS_LABELS[code],
+                    "n": statuses.get(code, 0), "pct": _ratio(statuses.get(code, 0), len(rows))}
+                   for code in (EN_ELABORACION, REABIERTO, CERRADO, FIRMADO)]
     closed_rows = [r for r in rows if r["status_code"] in CLOSED]
+    for e in equipment:
+        e["signed"] = e["status_code"] in CLOSED and e["firmado"]
+    brand_labels = normalize_brands([e["equipment_brand"] for e in equipment])
     active_techs = [t for t in technicians if t["n"]]
 
     def eq_list(pred, limit=100):
@@ -285,6 +305,8 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
             "closed": len(closed_rows),
             "closed_pct": _ratio(len(closed_rows), len(rows)),
             "pending_signature": sum(1 for r in closed_rows if not r["firmado"]),
+            "signed": sum(1 for r in closed_rows if r["firmado"]),
+            "signed_pct": _ratio(sum(1 for r in closed_rows if r["firmado"]), len(closed_rows)),
             "close_hours": _mean([r["close_hours"] for r in rows]),
             "with_photos": sum(1 for e in equipment if e["fotos"]),
             "with_photos_pct": _ratio(sum(1 for e in equipment if e["fotos"]), len(equipment)),
@@ -300,7 +322,7 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
         "status": status_dist,
         "condition": _distribution([e["estado"] for e in equipment]),
         "devices": _distribution([e["dispositivo"] for e in equipment], top=8),
-        "brands": _distribution([(e["equipment_brand"] or "").strip() or None for e in equipment], top=8),
+        "brands": _distribution(brand_labels, top=8),
         "with_obs": eq_list(lambda e: e["has_obs"]),
         "bad": eq_list(lambda e: e["estado"] in BAD_CONDITION),
         "with_photos": eq_list(lambda e: e["fotos"] > 0),

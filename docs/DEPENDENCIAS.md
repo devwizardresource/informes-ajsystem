@@ -14,7 +14,7 @@ Versiones fijadas el 2026-10-19; todas con licencias permisivas y sin vulnerabil
 | Pillow | 12.3.0 | Verificar y recodificar fotos y firmas (elimina EXIF/GPS) | Límite de píxeles; formatos en lista blanca |
 | openpyxl / defusedxml | 3.1.5 / 0.7.1 | Leer la matriz Excel de importación y generar su plantilla | Solo lectura, sin fórmulas, XML endurecido, límites de tamaño |
 | WeasyPrint | 70.0 | HTML/CSS → PDF | **Requiere Pango ≥ 1.44** en el servidor; recursos externos bloqueados |
-| pytest, pip-audit, uv (desarrollo) | 9.1.1, 2.10.1, 0.12.22 | Pruebas, auditoría, generación del lock | No se instalan en producción |
+| pytest, pip-audit, uv (desarrollo) | 9.2.0, 2.10.1, 0.13.6 | Pruebas, auditoría, generación del lock | No se instalan en producción |
 
 ## Navegador (alojados en `ajsystem/static`, sin CDN)
 

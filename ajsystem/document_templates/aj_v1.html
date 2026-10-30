@@ -21,7 +21,9 @@
   table.form td { padding-top: 1.5px; padding-bottom: 1.5px; }
   .choices label { white-space: nowrap; }
   .registro .cell { padding-top: 5px; padding-bottom: 4px; }
-  .sheet .sig .pad img { position: static; display: block; margin: 0 auto; max-width: 100%; max-height: .5in; width: auto; height: auto; }
+  /* Firmas más grandes que en la plantilla (0,52 in); el registro se compacta para mantener una sola página. */
+  .sheet .sig .pad { height: .82in; }
+  .sheet .sig .pad img { position: static; display: block; margin: 0 auto; max-width: 100%; max-height: .8in; width: auto; height: auto; }
   .anexo { break-before: page; }
   .anexo-head { background: #0b1020; color: #fff; font-weight: 700; letter-spacing: .04em; font-size: 9.4pt; padding: 5px 8px 5px 13px; position: relative; }
   .anexo-head::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, #1ec8f5, #a24cf0); }

@@ -28,6 +28,7 @@ MAX_SIDE = {"FOTO": 2400, "FIRMA_ELABORA": 1200, "FIRMA_RECIBE": 1200}
 THUMB_SIDE = 360
 MAX_PHOTOS = 40
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "MPO"}
+MAX_BATCH_SIGN = 500  # informes por firma en lote (una sola transacción)
 
 
 class AttachmentError(service.ReportError):
@@ -53,10 +54,11 @@ def _reencode(raw: bytes, kind: str) -> tuple[bytes, str, int, int, bytes]:
         raise AttachmentError("El archivo no es una imagen válida.", status=415) from exc
 
     img = ImageOps.exif_transpose(img)  # respeta la orientación de la cámara y descarta el EXIF
+    if kind in SIGNATURES:
+        img = _trim_signature(img.convert("RGBA"))
     img.thumbnail((MAX_SIDE[kind], MAX_SIDE[kind]))
     out = io.BytesIO()
     if kind in SIGNATURES:
-        img = img.convert("RGBA")
         img.save(out, format="PNG", optimize=True)
         mime = "image/png"
     else:
@@ -74,6 +76,39 @@ def _reencode(raw: bytes, kind: str) -> tuple[bytes, str, int, int, bytes]:
     else:
         thumb.save(tout, format="JPEG", quality=78, optimize=True)
     return content, mime, img.width, img.height, tout.getvalue()
+
+
+def _trim_signature(img):
+    """Recorta el margen vacío (transparente o casi blanco) alrededor del trazo de una firma RGBA.
+
+    Una firma escaneada o dibujada suele ocupar una parte pequeña de la imagen; sin el margen, el
+    trazo llena el recuadro de la hoja y del PDF en lugar de verse diminuto.
+    """
+    from PIL import ImageChops  # noqa: PLC0415
+
+    opaque = img.getchannel("A").point(lambda v: 255 if v > 24 else 0)
+    dark = img.convert("L").point(lambda v: 255 if v < 215 else 0)
+    box = ImageChops.multiply(opaque, dark).getbbox()
+    if not box:
+        return img
+    margin = max(4, round(max(box[2] - box[0], box[3] - box[1]) * 0.03))
+    box = (max(0, box[0] - margin), max(0, box[1] - margin),
+           min(img.width, box[2] + margin), min(img.height, box[3] + margin))
+    return img.crop(box) if box != (0, 0, img.width, img.height) else img
+
+
+def _profile_signature_image(user: dict) -> tuple[bytes, str, int, int]:
+    """Firma guardada en el perfil del usuario, sin márgenes vacíos (las de antes no se recortaban)."""
+    signature = db.query_one("SELECT mime, width, height, content FROM user_signatures WHERE user_id = %s",
+                             (user["id"],))
+    if not signature:
+        raise AttachmentError("Cargue primero su firma en Mi perfil.", status=409, code="sin_firma")
+    try:
+        content, mime, width, height, _thumb = _reencode(bytes(signature["content"]), "FIRMA_RECIBE")
+    except AttachmentError:  # firma guardada ilegible: se usa tal cual se guardó
+        content, mime, width, height = (bytes(signature["content"]), signature["mime"], signature["width"],
+                                        signature["height"])
+    return content, mime, width, height
 
 
 def add(report_id: int, user: dict, kind: str, raw: bytes, original_name: str = "") -> dict:
@@ -107,49 +142,97 @@ def sign_with_profile(report_id: int, user: dict) -> dict:
     """El Director firma un informe cerrado o enviado con la firma guardada en su perfil."""
     if "report.sign_closed" not in user.get("permissions", ()):
         raise AttachmentError("Solo el Director puede firmar los informes cerrados.", status=403)
-    signature = db.query_one("SELECT mime, width, height, content FROM user_signatures WHERE user_id = %s",
-                             (user["id"],))
-    if not signature:
-        raise AttachmentError("Cargue primero su firma en Mi perfil.", status=409, code="sin_firma")
-    content = bytes(signature["content"])
-    return _insert(report_id, user, "FIRMA_RECIBE", content, signature["mime"], signature["width"],
-                   signature["height"], None, "firma de perfil", require_closed=True)
+    content, mime, width, height = _profile_signature_image(user)
+    return _insert(report_id, user, "FIRMA_RECIBE", content, mime, width, height, None, "firma de perfil",
+                   require_closed=True)
+
+
+def sign_many(user: dict, report_ids: list[int] | None) -> dict:
+    """Firma en cadena del Director con la firma de su perfil.
+
+    report_ids=None firma todos los informes cerrados pendientes de firma; una lista firma solo esos.
+    Los informes ya firmados, abiertos, eliminados o no visibles se omiten (nunca se reemplaza una
+    firma existente), así que repetir la operación es inocuo. Todo ocurre en UNA transacción: si
+    algo falla, no queda firmado ninguno.
+    """
+    if "report.sign_closed" not in user.get("permissions", ()):
+        raise AttachmentError("Solo el Director puede firmar los informes cerrados.", status=403)
+    if report_ids is not None:
+        report_ids = sorted({int(i) for i in report_ids})  # orden fijo de bloqueo: sin interbloqueos
+        if not report_ids:
+            raise AttachmentError("Seleccione al menos un informe para firmar.", status=422, code="validacion")
+        if len(report_ids) > MAX_BATCH_SIGN:
+            raise AttachmentError(f"Puede firmar hasta {MAX_BATCH_SIGN} informes por operación.", status=422,
+                                  code="validacion")
+    content, mime, width, height = _profile_signature_image(user)
+    signed, skipped = [], 0
+    with db.transaction() as cur:
+        if report_ids is None:
+            cur.execute(f"""SELECT r.id FROM reports r
+                             WHERE r.deleted_at IS NULL AND r.status_code IN (%s, %s) AND NOT {service.SIGNED_SQL}
+                             ORDER BY r.id LIMIT %s""", (service.CERRADO, service.ENVIADO, MAX_BATCH_SIGN))
+            report_ids = [row["id"] for row in cur.fetchall()]
+        for report_id in report_ids:
+            try:
+                report = service._lock_visible(cur, report_id, user)
+            except service.ReportNotFound:
+                skipped += 1
+                continue
+            cur.execute("SELECT 1 FROM report_attachments WHERE report_id = %s AND kind = 'FIRMA_RECIBE' "
+                        "AND deleted_at IS NULL FOR UPDATE", (report_id,))
+            if report["status_code"] not in service.CLOSED or cur.fetchone():
+                skipped += 1
+                continue
+            _insert_in(cur, report, user, "FIRMA_RECIBE", content, mime, width, height, None, "firma de perfil (lote)")
+            signed.append(report["code"])
+        audit.write(cur, audit.REPORTS_SIGNED, "EXITO", object_type="firma_lote",
+                    object_id=f"{len(signed)} informes",
+                    detail={"firmados": len(signed), "omitidos": skipped, "primero": signed[0] if signed else None,
+                            "ultimo": signed[-1] if signed else None, "informes": ", ".join(signed)[:1000]})
+    return {"signed": signed, "skipped": skipped}
 
 
 def _insert(report_id: int, user: dict, kind: str, content: bytes, mime: str, width: int, height: int,
             thumb: bytes | None, original_name: str, require_closed: bool = False) -> dict:
-    digest = hashlib.sha256(content).hexdigest()
-    public_id = uuid.uuid4().hex
     with db.transaction() as cur:
         report = service._lock_visible(cur, report_id, user)
         if require_closed and report["status_code"] not in service.CLOSED:
             raise AttachmentError("El informe debe estar cerrado para firmarlo como Director.", status=409,
                                   code="abierto")
-        _check_writable(report, user, kind)
-        now = db.utcnow()
-        replaced = None
-        if kind in SIGNATURES:  # una sola firma vigente por tipo
-            cur.execute("SELECT public_id FROM report_attachments WHERE report_id = %s AND kind = %s "
-                        "AND deleted_at IS NULL FOR UPDATE", (report_id, kind))
-            prev = cur.fetchone()
-            if prev:
-                cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s WHERE public_id = %s",
-                            (now, user["id"], prev["public_id"]))
-                replaced = prev["public_id"]
-        else:
-            cur.execute("SELECT COUNT(*) AS n FROM report_attachments WHERE report_id = %s AND kind = 'FOTO' "
-                        "AND deleted_at IS NULL", (report_id,))
-            if cur.fetchone()["n"] >= MAX_PHOTOS:
-                raise AttachmentError(f"Se alcanzó el máximo de {MAX_PHOTOS} fotos por informe.", status=409)
-        cur.execute(
-            """INSERT INTO report_attachments (public_id, report_id, kind, mime, size_bytes, width, height, sha256,
-                                               content, thumb, original_name, created_by, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (public_id, report_id, kind, mime, len(content), width, height, digest, content, thumb,
-             (original_name or "")[:160], user["id"], now))
-        audit.write(cur, audit.ATTACHMENT_ADDED, "EXITO", object_type="informe", object_id=report["code"],
-                    detail={"informe_id": report_id, "adjunto": public_id, "tipo": kind, "bytes": len(content),
-                            "sha256": digest, "reemplaza": replaced})
+        return _insert_in(cur, report, user, kind, content, mime, width, height, thumb, original_name)
+
+
+def _insert_in(cur, report: dict, user: dict, kind: str, content: bytes, mime: str, width: int, height: int,
+               thumb: bytes | None, original_name: str) -> dict:
+    """Inserta el adjunto en la transacción en curso (el informe ya está bloqueado con FOR UPDATE)."""
+    report_id = report["id"]
+    _check_writable(report, user, kind)
+    digest = hashlib.sha256(content).hexdigest()
+    public_id = uuid.uuid4().hex
+    now = db.utcnow()
+    replaced = None
+    if kind in SIGNATURES:  # una sola firma vigente por tipo
+        cur.execute("SELECT public_id FROM report_attachments WHERE report_id = %s AND kind = %s "
+                    "AND deleted_at IS NULL FOR UPDATE", (report_id, kind))
+        prev = cur.fetchone()
+        if prev:
+            cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s WHERE public_id = %s",
+                        (now, user["id"], prev["public_id"]))
+            replaced = prev["public_id"]
+    else:
+        cur.execute("SELECT COUNT(*) AS n FROM report_attachments WHERE report_id = %s AND kind = 'FOTO' "
+                    "AND deleted_at IS NULL", (report_id,))
+        if cur.fetchone()["n"] >= MAX_PHOTOS:
+            raise AttachmentError(f"Se alcanzó el máximo de {MAX_PHOTOS} fotos por informe.", status=409)
+    cur.execute(
+        """INSERT INTO report_attachments (public_id, report_id, kind, mime, size_bytes, width, height, sha256,
+                                           content, thumb, original_name, created_by, created_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (public_id, report_id, kind, mime, len(content), width, height, digest, content, thumb,
+         (original_name or "")[:160], user["id"], now))
+    audit.write(cur, audit.ATTACHMENT_ADDED, "EXITO", object_type="informe", object_id=report["code"],
+                detail={"informe_id": report_id, "adjunto": public_id, "tipo": kind, "bytes": len(content),
+                        "sha256": digest, "reemplaza": replaced})
     return {"id": public_id, "kind": kind, "width": width, "height": height, "size": len(content)}
 
 

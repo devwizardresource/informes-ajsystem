@@ -15,7 +15,7 @@
   <div><label for="serie">N.º de serie</label><input id="serie" name="serie" value="{{ filters.serial }}" maxlength="100"></div>
   <div><label for="estado">Estado</label>
     <select id="estado" name="estado"><option value="">Todos</option>
-      {% for code in ('EN_ELABORACION', 'REABIERTO', 'CERRADO') %}<option value="{{ code }}" {% if filters.status == code %}selected{% endif %}>{{ STATUS_LABELS[code] }}</option>{% endfor %}
+      {% for code in ('EN_ELABORACION', 'REABIERTO', 'CERRADO', 'FIRMADO') %}<option value="{{ code }}" {% if filters.status == code %}selected{% endif %}>{{ 'Cerrado · pendiente de firma' if code == 'CERRADO' else STATUS_LABELS[code] }}</option>{% endfor %}
     </select></div>
   <div><label for="fecha_por">Fecha por</label>
     <select id="fecha_por" name="fecha_por">
@@ -33,7 +33,8 @@
   <div class="filter-actions"><button type="submit" class="btn btn-primary">Filtrar</button> <a class="btn btn-ghost" href="{{ url_for('consolidation.index') }}">Limpiar</a></div>
 </form>
 
-<p class="muted">{{ total }} informe(s) encontrados.</p>
+<div class="page-head"><p class="muted">{{ total }} informe(s) encontrados.</p>
+  <a class="btn" href="{{ url_for('consolidation.export_xlsx', **request.args.to_dict()) }}" download>Exportar a Excel (.xlsx)</a></div>
 <div class="table-wrap">
 <table class="table">
   <thead><tr><th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca</th><th scope="col">N.º de serie</th><th scope="col">Técnico</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col">Cerrado</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
@@ -45,7 +46,7 @@
       <td data-label="Marca">{{ r.equipment_brand or '—' }}</td>
       <td data-label="N.º de serie">{{ r.equipment_serial or '—' }}</td>
       <td data-label="Técnico">{{ r.owner_name }}</td>
-      <td data-label="Estado">{{ status_badge(r.status_code) }}</td>
+      <td data-label="Estado">{{ status_badge(r.status_code, r.signed) }}</td>
       <td data-label="Creado">{{ r.created_at|localdt }}</td>
       <td data-label="Cerrado">{{ r.closed_at|localdt }}</td>
       <td class="nowrap"><a class="btn btn-sm" href="{{ url_for('reports.detail', report_id=r.id) }}">Detalle</a>

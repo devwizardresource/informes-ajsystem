@@ -1,5 +1,9 @@
-{% macro status_badge(code) -%}
+{% macro status_badge(code, signed=false) -%}
+{% if signed and code in ('CERRADO', 'ENVIADO') -%}
+<span class="badge badge-firmado" title="Cerrado y firmado por el Director">Firmado</span>
+{%- else -%}
 <span class="badge badge-{{ 'cerrado' if code == 'ENVIADO' else code|lower }}">{{ STATUS_LABELS.get(code, code) }}</span>
+{%- endif %}
 {%- endmacro %}
 
 {% macro pagination(page, pages, endpoint) -%}
@@ -17,19 +21,21 @@
 <div class="empty"><strong>{{ title }}</strong>{% if text %}<span>{{ text }}</span>{% endif %}{{ caller() if caller else '' }}</div>
 {%- endmacro %}
 
-{% macro report_rows(rows, show_owner=false, date_label='Actualizado', date_field='updated_at', empty='No hay informes.') -%}
+{% macro report_rows(rows, show_owner=false, date_label='Actualizado', date_field='updated_at', empty='No hay informes.', select=none) -%}
+{# select: id del formulario de firma en lote; añade una casilla por informe (name="ids") #}
 {% if rows %}
 <div class="table-wrap">
 <table class="table">
-  <thead><tr><th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca · N.º de serie</th>{% if show_owner %}<th scope="col">Técnico</th>{% endif %}<th scope="col">Estado</th><th scope="col">{{ date_label }}</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+  <thead><tr>{% if select %}<th scope="col" class="col-check"><input type="checkbox" form="{{ select }}" data-check-all="ids" aria-label="Seleccionar todos"></th>{% endif %}<th scope="col">Informe</th><th scope="col">Equipo</th><th scope="col">Marca · N.º de serie</th>{% if show_owner %}<th scope="col">Técnico</th>{% endif %}<th scope="col">Estado</th><th scope="col">{{ date_label }}</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr>
+      {% if select %}<td class="col-check"><input type="checkbox" name="ids" value="{{ r.id }}" form="{{ select }}" aria-label="Seleccionar {{ r.code }}"></td>{% endif %}
       <td data-label="Informe"><code>{{ r.code }}</code>{% if r.reopen_count %} <small class="muted">({{ r.reopen_count }} reap.)</small>{% endif %}</td>
       <td data-label="Equipo">{{ r.title or '— sin nombre —' }}</td>
       <td data-label="Marca · Serie">{{ r.equipment_brand or '—' }}{% if r.equipment_serial %} · <code>{{ r.equipment_serial }}</code>{% endif %}</td>
       {% if show_owner %}<td data-label="Técnico">{{ r.owner_name }}</td>{% endif %}
-      <td data-label="Estado">{{ status_badge(r.status_code) }}</td>
+      <td data-label="Estado">{{ status_badge(r.status_code, r.signed) }}</td>
       <td data-label="{{ date_label }}" class="nowrap">{{ r[date_field]|localdt }}</td>
       <td><a class="btn btn-sm" href="{{ url_for('reports.detail', report_id=r.id) }}">Abrir</a></td>
     </tr>
@@ -40,4 +46,16 @@
 {% else %}
 <div class="empty"><strong>{{ empty }}</strong></div>
 {% endif %}
+{%- endmacro %}
+
+{% macro sign_batch_form(rows, total, back='lote') -%}
+{# Firma en cadena del Director: los marcados en la tabla (form=) o todos los pendientes. #}
+<form id="firma-lote" method="post" action="{{ url_for('reports.sign_batch') }}" class="sign-batch" data-busy>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="volver" value="{{ back }}">
+  <button type="submit" class="btn btn-primary" name="modo" value="seleccionados"
+          data-confirm="¿Firmar como Director los informes seleccionados?">Firmar seleccionados</button>
+  <button type="submit" class="btn" name="modo" value="todos"
+          data-confirm="¿Firmar como Director los {{ total }} informes cerrados pendientes de firma?">Firmar todos los pendientes ({{ total }})</button>
+</form>
 {%- endmacro %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_macros.html" import report_rows, sign_batch_form with context %}
+{% block title %}Informes pendientes de firma{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Informes pendientes de mi firma{% if total %} <span class="count-pill">{{ total }}</span>{% endif %}</h1>
+</div>
+<p class="muted small">Informes cerrados que aún no tienen la firma del Director. Marque los que quiera firmar o fírmelos todos en cadena con la firma guardada en su perfil; cada informe queda en verde como «Firmado». Los ya firmados nunca se vuelven a firmar en lote.</p>
+{% if rows %}
+  {% if has_profile_signature %}{{ sign_batch_form(rows, total) }}
+  {% else %}<p class="notice notice-info">Para firmar, <a href="{{ url_for('auth.profile') }}">cargue primero su firma en Mi perfil</a>.</p>{% endif %}
+{% endif %}
+{{ report_rows(rows, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='No hay informes cerrados pendientes de su firma.', select='firma-lote' if has_profile_signature else none) }}
+{% if total > rows|length %}<p class="small muted">Se muestran {{ rows|length }} de {{ total }}. «Firmar todos los pendientes» firma hasta {{ rows|length }} por operación; repítala para continuar.</p>{% endif %}
+{% endblock %}

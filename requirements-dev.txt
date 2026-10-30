@@ -1,4 +1,4 @@
 -r requirements.txt
-pytest==9.1.1
+pytest==9.2.0
 pip-audit==2.10.1       # Auditoría de vulnerabilidades (PyPI Advisory / OSV)
-uv==0.13.4              # Genera requirements.lock con hashes para cualquier versión de Python
+uv==0.13.6              # Genera requirements.lock con hashes para cualquier versión de Python

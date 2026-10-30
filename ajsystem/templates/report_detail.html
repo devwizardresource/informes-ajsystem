@@ -44,7 +44,7 @@
 </div>
 
 <div class="page-meta">
-  <b>{{ report.code }}</b> {{ status_badge(report.status_code) }}
+  <b>{{ report.code }}</b> {{ status_badge(report.status_code, report.signed) }}
   <span>Elaborado por {{ report.owner_name }} · creado {{ report.created_at|localdt }} · revisión {{ report.revision }}
   · última modificación {{ report.updated_at|localdt }} por {{ report.updated_by_name }}
   {% if report.closed_at %} · cerrado {{ report.closed_at|localdt }}{% endif %}</span>

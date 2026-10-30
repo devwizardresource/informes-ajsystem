@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import report_rows with context %}
+{% from "_macros.html" import report_rows, sign_batch_form with context %}
 {% from "_charts.html" import activity_heatmap %}
 {% block title %}Inicio{% endblock %}
 {% block content %}
@@ -28,7 +28,7 @@
       <h2 id="resumen-titulo">Resumen de informes</h2>
       <div class="stats">
         {% for code, n in summary.items() %}
-        <a class="stat" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ STATUS_LABELS[code] }}</span></a>
+        <a class="stat stat-{{ code|lower }}" href="{{ url_for('consolidation.index', estado=code) }}"><span class="stat-n">{{ n }}</span><span class="stat-l">{{ 'Cerrado · pendiente de firma' if code == 'CERRADO' else STATUS_LABELS[code] }}</span></a>
         {% endfor %}
       </div>
     </section>
@@ -37,8 +37,12 @@
     {% if to_sign is defined %}
     <section aria-labelledby="firma-titulo">
       <h2 id="firma-titulo">Informes cerrados pendientes de mi firma{% if to_sign_total %} <span class="count-pill">{{ to_sign_total }}</span>{% endif %}</h2>
-      {{ report_rows(to_sign, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='No hay informes cerrados pendientes de su firma.') }}
-      {% if to_sign_total > to_sign|length %}<p class="small"><a href="{{ url_for('consolidation.index', estado='CERRADO') }}">Ver todos los informes cerrados</a></p>{% endif %}
+      {% if to_sign %}
+      {% if has_profile_signature %}{{ sign_batch_form(to_sign, to_sign_total, back='inicio') }}
+      {% else %}<p class="notice notice-info">Para firmar en lote, <a href="{{ url_for('auth.profile') }}">cargue primero su firma en Mi perfil</a>.</p>{% endif %}
+      {% endif %}
+      {{ report_rows(to_sign, show_owner=true, date_label='Cerrado', date_field='closed_at', empty='No hay informes cerrados pendientes de su firma.', select='firma-lote' if has_profile_signature else none) }}
+      {% if to_sign_total > to_sign|length %}<p class="small"><a href="{{ url_for('reports.to_sign') }}">Ver los {{ to_sign_total }} informes pendientes de firma</a></p>{% endif %}
     </section>
     {% endif %}
 

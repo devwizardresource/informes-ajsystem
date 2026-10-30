@@ -27,9 +27,15 @@ from . import schema
 EN_ELABORACION, CERRADO, ENVIADO, REABIERTO = "EN_ELABORACION", "CERRADO", "ENVIADO", "REABIERTO"
 EDITABLE = {EN_ELABORACION, REABIERTO}
 CLOSED = {CERRADO, ENVIADO}
-STATUS_LABELS = {EN_ELABORACION: "En elaboración", CERRADO: "Cerrado", ENVIADO: "Cerrado", REABIERTO: "Reabierto"}
-# Estados que se ofrecen en filtros y resúmenes (ENVIADO se agrupa con CERRADO).
-FILTER_STATUSES = (EN_ELABORACION, REABIERTO, CERRADO)
+# FIRMADO no es un estado guardado: es un informe cerrado con la firma vigente del Director.
+FIRMADO = "FIRMADO"
+STATUS_LABELS = {EN_ELABORACION: "En elaboración", CERRADO: "Cerrado", ENVIADO: "Cerrado", REABIERTO: "Reabierto",
+                 FIRMADO: "Firmado"}
+# Estados que se ofrecen en filtros y resúmenes (ENVIADO se agrupa con CERRADO; CERRADO es «pendiente de firma»).
+FILTER_STATUSES = (EN_ELABORACION, REABIERTO, CERRADO, FIRMADO)
+# Columna calculada: el informe tiene la firma vigente del Director (quien recibe / aprueba).
+SIGNED_SQL = ("EXISTS (SELECT 1 FROM report_attachments sa WHERE sa.report_id = r.id "
+              "AND sa.kind = 'FIRMA_RECIBE' AND sa.deleted_at IS NULL)")
 _IDEM_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -96,7 +102,8 @@ def capabilities(report: dict, user: dict, pending_request: dict | None = None, 
 
 _BASE_SELECT = """
     SELECT r.*, o.username AS owner_username, o.full_name AS owner_name, o.id_number AS owner_id_number,
-           ub.full_name AS updated_by_name, cb.full_name AS closed_by_name, sb.full_name AS sent_by_name
+           ub.full_name AS updated_by_name, cb.full_name AS closed_by_name, sb.full_name AS sent_by_name,
+           """ + SIGNED_SQL + """ AS signed
       FROM reports r
       JOIN users o ON o.id = r.owner_id
       JOIN users ub ON ub.id = r.updated_by
@@ -536,7 +543,7 @@ def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dic
     placeholders = ",".join(["%s"] * len(statuses))
     return db.query_all(
         f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.revision,
-                   r.created_at, r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count
+                   r.created_at, r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count, {SIGNED_SQL} AS signed
               FROM reports r WHERE r.owner_id = %s AND r.deleted_at IS NULL AND r.status_code IN ({placeholders})
              ORDER BY r.updated_at DESC LIMIT %s""", (user["id"], *statuses, limit))
 
@@ -544,8 +551,8 @@ def list_own(user: dict, statuses: tuple[str, ...], limit: int = 50) -> list[dic
 def home_lists(user: dict) -> dict[str, list[dict]]:
     """Load the lists owned by the user with one indexed database round-trip."""
     names = ("id", "code", "title", "equipment_serial", "equipment_brand", "status_code", "revision",
-             "created_at", "updated_at", "closed_at", "last_sent_at", "reopen_count")
-    columns = ", ".join(names)
+             "created_at", "updated_at", "closed_at", "last_sent_at", "reopen_count", "signed")
+    columns = ", ".join(f"{SIGNED_SQL} AS signed" if name == "signed" else f"r.{name}" for name in names)
     qualified_columns = ", ".join(f"q.{name}" for name in names)
     groups = (
         ("drafts", (EN_ELABORACION, REABIERTO), 50),
@@ -556,9 +563,9 @@ def home_lists(user: dict) -> dict[str, list[dict]]:
         placeholders = ",".join(["%s"] * len(statuses))
         branches.append(
             f"""SELECT '{bucket}' AS dashboard_bucket, {qualified_columns}
-                  FROM (SELECT {columns} FROM reports
-                         WHERE owner_id = %s AND deleted_at IS NULL AND status_code IN ({placeholders})
-                         ORDER BY updated_at DESC, id DESC LIMIT %s) AS q""")
+                  FROM (SELECT {columns} FROM reports r
+                         WHERE r.owner_id = %s AND r.deleted_at IS NULL AND r.status_code IN ({placeholders})
+                         ORDER BY r.updated_at DESC, r.id DESC LIMIT %s) AS q""")
         params.extend((user["id"], *statuses, limit))
 
     rows = db.query_all(" UNION ALL ".join(branches), tuple(params))
@@ -571,8 +578,7 @@ def home_lists(user: dict) -> dict[str, list[dict]]:
     return result
 
 
-def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[dict], int]:
-    """Consulta paginada con filtros en el servidor (Consolidación)."""
+def _search_where(user: dict, filters: dict) -> tuple[str, list]:
     clause, params = visibility_clause(user)
     where, args = [clause], list(params)
     if filters.get("code"):
@@ -587,8 +593,8 @@ def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[d
     if filters.get("serial"):
         where.append("r.equipment_serial LIKE %s")
         args.append(f"%{_like_escape(filters['serial'])}%")
-    if filters.get("status") == CERRADO:
-        where.append("r.status_code IN (%s, %s)")
+    if filters.get("status") in (CERRADO, FIRMADO):
+        where.append(f"r.status_code IN (%s, %s) AND {'' if filters['status'] == FIRMADO else 'NOT '}{SIGNED_SQL}")
         args.extend((CERRADO, ENVIADO))
     elif filters.get("status"):
         where.append("r.status_code = %s")
@@ -600,18 +606,50 @@ def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[d
     if filters.get("to_utc"):
         where.append(f"{date_col} < %s")
         args.append(filters["to_utc"])
-    where_sql = " AND ".join(where)
+    return " AND ".join(where), args
+
+
+def search(user: dict, filters: dict, page: int, page_size: int) -> tuple[list[dict], int]:
+    """Consulta paginada con filtros en el servidor (Consolidación)."""
+    where_sql, args = _search_where(user, filters)
     order = SORTS.get(filters.get("sort"), SORTS["recientes"])
     total = db.query_one(f"SELECT COUNT(*) AS n FROM reports r WHERE {where_sql}", tuple(args))["n"]
     rows = db.query_all(
         f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.created_at,
                    r.updated_at, r.closed_at, r.last_sent_at, r.reopen_count, o.full_name AS owner_name,
-                   o.username AS owner_username
+                   o.username AS owner_username, {SIGNED_SQL} AS signed
               FROM reports r JOIN users o ON o.id = r.owner_id
              WHERE {where_sql}
              ORDER BY {order} LIMIT %s OFFSET %s""",
         (*args, page_size, (page - 1) * page_size))
     return rows, total
+
+
+EXPORT_MAX_ROWS = 20000
+
+
+def export_rows(user: dict, filters: dict) -> tuple[list[dict], bool]:
+    """Informes para la exportación a Excel (mismos filtros que Consolidación), por consecutivo.
+
+    Devuelve (filas, truncado). Incluye quién firmó como Director y cuándo (firma vigente).
+    """
+    where_sql, args = _search_where(user, filters)
+    rows = db.query_all(
+        f"""SELECT r.id, r.code, r.template_code, r.status_code, r.title, r.equipment_brand, r.equipment_serial,
+                   r.data, r.revision, r.reopen_count, r.created_at, r.updated_at, r.closed_at,
+                   o.full_name AS owner_name, o.username AS owner_username, o.id_number AS owner_id_number,
+                   cb.full_name AS closed_by_name, s.created_at AS signed_at, su.full_name AS signed_by_name,
+                   (SELECT COUNT(*) FROM report_attachments f
+                     WHERE f.report_id = r.id AND f.kind = 'FOTO' AND f.deleted_at IS NULL) AS photos
+              FROM reports r JOIN users o ON o.id = r.owner_id
+              LEFT JOIN users cb ON cb.id = r.closed_by
+              LEFT JOIN report_attachments s ON s.report_id = r.id AND s.kind = 'FIRMA_RECIBE' AND s.deleted_at IS NULL
+              LEFT JOIN users su ON su.id = s.created_by
+             WHERE {where_sql}
+             ORDER BY r.code ASC LIMIT %s""", (*args, EXPORT_MAX_ROWS + 1))
+    for row in rows:
+        row["data"] = _loads(row["data"])
+    return rows[:EXPORT_MAX_ROWS], len(rows) > EXPORT_MAX_ROWS
 
 
 # Ordenaciones permitidas (lista blanca). «marca» agrupa los equipos por marca y número de serie.
@@ -631,10 +669,14 @@ def brands(user: dict) -> list[str]:
 
 def summary(user: dict) -> dict:
     clause, params = visibility_clause(user)
-    rows = db.query_all(f"SELECT r.status_code, COUNT(*) AS n FROM reports r WHERE {clause} GROUP BY r.status_code", params)
+    rows = db.query_all(f"""SELECT r.status_code, {SIGNED_SQL} AS signed, COUNT(*) AS n FROM reports r
+                             WHERE {clause} GROUP BY r.status_code, signed""", params)
     counts = {s: 0 for s in FILTER_STATUSES}
     for r in rows:
-        counts[CERRADO if r["status_code"] == ENVIADO else r["status_code"]] += r["n"]
+        if r["status_code"] in CLOSED:
+            counts[FIRMADO if r["signed"] else CERRADO] += r["n"]
+        else:
+            counts[r["status_code"]] += r["n"]
     return counts
 
 
@@ -642,7 +684,7 @@ def recent_closed(user: dict, limit: int = 15) -> list[dict]:
     clause, params = visibility_clause(user)
     return db.query_all(
         f"""SELECT r.id, r.code, r.title, r.equipment_serial, r.equipment_brand, r.status_code, r.closed_at,
-                   r.reopen_count, o.full_name AS owner_name
+                   r.reopen_count, o.full_name AS owner_name, {SIGNED_SQL} AS signed
               FROM reports r JOIN users o ON o.id = r.owner_id
              WHERE {clause} AND r.status_code IN (%s, %s)
              ORDER BY r.closed_at DESC, r.id DESC LIMIT %s""", (*params, CERRADO, ENVIADO, limit))
