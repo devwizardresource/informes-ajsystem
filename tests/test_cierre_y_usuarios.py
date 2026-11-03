@@ -21,13 +21,23 @@ def _status(q, rid):
 
 
 # ---------------------------------------------------------------- reapertura de informes firmados
-def test_tecnico_no_reabre_un_informe_firmado_por_el_director(browser, make_user, q):
-    _t, bt, _d, _bd, rid = _signed_report(browser, make_user, q)
+def test_tecnico_reabre_un_informe_firmado_y_el_director_firma_de_nuevo(browser, make_user, q):
+    t, bt, _d, bd, rid = _signed_report(browser, make_user, q)
     page = bt.get(f"/informes/{rid}").get_data(as_text=True)
-    assert "Reabrir para editar" not in page and "Solo el Director puede reabrirlo" in page
-    r = bt.post(f"/informes/{rid}/reabrir", {"motivo": "Quiero cambiar el informe firmado", "op_id": new_op()})
-    assert r.status_code == 302 and _status(q, rid) == "CERRADO"
-    assert len(_active_receive(q, rid)) == 1  # la firma del Director sigue vigente
+    assert "Reabrir para editar" in page and "la firma del Director se retirará" in page
+    r = bt.post(f"/informes/{rid}/reabrir", {"motivo": "Corregir la capacidad del disco", "op_id": new_op()})
+    assert r.status_code == 302 and _status(q, rid) == "REABIERTO"
+    assert _active_receive(q, rid) == []
+    retired = q("SELECT deleted_by FROM report_attachments WHERE report_id = %s AND kind = 'FIRMA_RECIBE'", (rid,))
+    assert retired == [{"deleted_by": t["id"]}]  # retirada lógica: la firma anterior se conserva
+    # Mientras el técnico edita, el Director no puede firmar.
+    bd.post(f"/informes/{rid}/firmar", csrf_from=f"/informes/{rid}")
+    assert _active_receive(q, rid) == []
+    # El técnico guarda y cierra: queda otra vez pendiente de la firma del Director.
+    assert fill(bt, q, rid, accion="cerrar", nombre="Corregido").status_code == 302
+    assert _status(q, rid) == "CERRADO"
+    assert bd.post(f"/informes/{rid}/firmar", csrf_from=f"/informes/{rid}").status_code == 302
+    assert len(_active_receive(q, rid)) == 1
 
 
 def test_director_reabre_informe_firmado_y_la_firma_se_retira(browser, make_user, q):

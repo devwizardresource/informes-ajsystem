@@ -106,7 +106,7 @@ def _render_detail(report: dict, *, form_values: dict | None = None, errors: dic
     values = form_values if form_values is not None else schema.data_for_template(report["template_code"], report["data"])
     pending = service.pending_request_for(report["id"])
     files = attachments.list_for(report["id"])
-    caps = service.capabilities(report, g.user, pending, signed=any(a["kind"] == "FIRMA_RECIBE" for a in files))
+    caps = service.capabilities(report, g.user, pending)
     signatures = {a["kind"]: url_for("reports.attachment_get", report_id=report["id"], public_id=a["public_id"])
                   for a in files if a["kind"] in attachments.SIGNATURES}
     if "FIRMA_ELABORA" not in signatures:

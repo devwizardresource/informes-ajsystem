@@ -78,8 +78,8 @@ def visibility_clause(user: dict, alias: str = "r") -> tuple[str, tuple]:
     return f"{alive} AND {alias}.owner_id = %s", (user["id"],)
 
 
-def capabilities(report: dict, user: dict, pending_request: dict | None = None, signed: bool = False) -> dict:
-    """signed: el informe tiene la firma vigente del Director (solo el Director puede reabrirlo)."""
+def capabilities(report: dict, user: dict, pending_request: dict | None = None) -> dict:
+    """Reabrir un informe firmado retira la firma del Director; la vuelve a firmar cuando se cierre."""
     own = report["owner_id"] == user["id"]
     perms = user["permissions"]
     manage = (own and "report.edit_own" in perms) or "report.edit_any" in perms
@@ -87,8 +87,7 @@ def capabilities(report: dict, user: dict, pending_request: dict | None = None, 
     return {
         "edit": manage and status in EDITABLE,
         "close": manage and status in EDITABLE,
-        "reopen": ("report.reopen" in perms and status in CLOSED
-                   and (not signed or "report.sign_closed" in perms)),
+        "reopen": "report.reopen" in perms and status in CLOSED,
         # El autor sin permiso de reapertura la solicita al jefe o al responsable.
         "request_reopen": (own and "report.request_reopen" in perms and "report.reopen" not in perms
                            and status in CLOSED and pending_request is None),
@@ -352,9 +351,6 @@ def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row
     cur.execute("SELECT public_id FROM report_attachments WHERE report_id = %s AND kind = 'FIRMA_RECIBE' "
                 "AND deleted_at IS NULL FOR UPDATE", (report["id"],))
     signature = cur.fetchone()
-    if signature and "report.sign_closed" not in user["permissions"]:
-        raise ReportError("El Director ya firmó este informe: solo el Director puede reabrirlo.", status=403,
-                          code="firmado")
     now = db.utcnow()
     cur.execute("UPDATE reports SET status_code = %s, reopen_count = reopen_count + 1, updated_at = %s, "
                 "updated_by = %s WHERE id = %s AND status_code = %s",
@@ -365,7 +361,7 @@ def _reopen_in(cur, report: dict, user: dict, reason: str, key: str, request_row
                   reason=reason, key=key)
     if signature:
         # La firma aprobaba el contenido cerrado: se retira (queda en el historial) y el informe
-        # vuelve a estar pendiente de firma cuando se cierre de nuevo.
+        # vuelve a estar pendiente de la firma del Director cuando el técnico lo cierre de nuevo.
         cur.execute("UPDATE report_attachments SET deleted_at = %s, deleted_by = %s WHERE public_id = %s",
                     (now, user["id"], signature["public_id"]))
     pending = request_row or _pending_request(cur, report["id"])
