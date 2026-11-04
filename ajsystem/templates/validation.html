@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Convalidación de inventario{% endblock %}
+{% macro report_links(rs) -%}
+{% for r in rs %}<div class="val-report"><a href="{{ url_for('reports.detail', report_id=r.id) }}"><code>{{ r.code }}</code></a> {{ status_badge(r.status_code, r.signed) }}{% if r.delete_candidate %} <span class="badge badge-val-duplicado">Posible eliminación</span>{% endif %}</div>{% else %}—{% endfor %}
+{%- endmacro %}
+{% macro report_table(rs) -%}
+<div class="table-wrap">
+  <table class="table table-dense" data-sortable>
+    <thead><tr><th scope="col" data-sort="text">Informe</th><th scope="col" data-sort="text">Equipo</th><th scope="col" data-sort="text">Marca · serie</th>
+      <th scope="col" data-sort="text">Técnico</th><th scope="col" data-sort="text">Estado del informe</th><th scope="col" data-sort="text">Creado</th></tr></thead>
+    <tbody>
+    {% for r in rs %}
+      <tr>
+        <td data-label="Informe"><a href="{{ url_for('reports.detail', report_id=r.id) }}"><code>{{ r.code }}</code></a></td>
+        <td data-label="Equipo">{{ r.title or '—' }}</td>
+        <td data-label="Marca · serie">{{ r.equipment_brand or 'Sin dato' }}{% if r.equipment_serial %} · <code>{{ r.equipment_serial }}</code>{% endif %}</td>
+        <td data-label="Técnico">{{ r.owner_name }}</td>
+        <td data-label="Estado del informe">{{ status_badge(r.status_code, r.signed) }}</td>
+        <td data-label="Creado" class="nowrap">{{ r.created_at|localdt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+{% block content %}
+<div class="exec">
+  <section class="hero exec-hero">
+    <h1>Convalidación de inventario</h1>
+    <p>Equipos de la matriz frente a los informes registrados, comparados por número de serie.</p>
+  </section>
+  {% include "_tablero_tabs.html" %}
+
+  {% if unavailable %}<div class="notice" role="status">No fue posible consultar la matriz en este momento. Intente de nuevo en unos minutos.</div>{% endif %}
+
+  {% if m %}
+  {% set k = m.kpi %}
+  {% if m.truncated %}<div class="notice" role="status">Hay más informes de los que se analizan a la vez: las cifras pueden estar incompletas.</div>{% endif %}
+  {% if m.repeated_in_matrix %}<div class="notice" role="status">La matriz repite estos seriales: {{ m.repeated_in_matrix|join(', ') }}. Revise el archivo: cada serial debería aparecer una vez.</div>{% endif %}
+  <section aria-labelledby="val-kpi-t">
+    <h2 id="val-kpi-t" class="sr-only">Indicadores de convalidación</h2>
+    <div class="kpis">
+      <div class="kpi"><span class="kpi-n">{{ k['items'] }}</span><span class="kpi-l">Equipos en la matriz</span><small>{{ k.units }} unidades · {{ k.with_serial }} con serial</small></div>
+      <div class="kpi is-ok"><span class="kpi-n">{{ k.registered }}</span><span class="kpi-l">Registrados</span><small>{{ k.registered_pct|pct }} de los que tienen serial · {{ k.signed }} firmados</small></div>
+      <div class="kpi is-accent"><span class="kpi-n">{{ k.pending }}</span><span class="kpi-l">Pendientes</span><small>Sin informe con ese serial</small></div>
+      <div class="kpi is-warn"><span class="kpi-n">{{ k.delete_candidates }}</span><span class="kpi-l">Informes duplicados</span><small>Posible eliminación · equipos afectados: {{ k.duplicated_items }}</small></div>
+      <div class="kpi"><span class="kpi-n">{{ m.outside|length }}</span><span class="kpi-l">Informes fuera de la matriz</span><small>Su serial no aparece en la matriz</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.partial }}</span><span class="kpi-l">Serial incompleto</span><small>Coinciden solo por el inicio del serial: confirmar</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.no_serial }}</span><span class="kpi-l">Sin serial en la matriz</span><small>No se pueden convalidar por serial</small></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="val-cat-t">
+    <h2 id="val-cat-t">Avance por categoría</h2>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="text">{{ columns[4] }}</th><th scope="col" data-sort="num">Equipos</th><th scope="col" data-sort="num">Unidades</th>
+          <th scope="col" data-sort="num">Registrados</th><th scope="col" data-sort="num">Pendientes</th><th scope="col" data-sort="num">Sin serial</th><th scope="col" data-sort="num">Avance</th></tr></thead>
+        <tbody>
+        {% for c in m.categories %}
+          <tr>
+            <td data-label="{{ columns[4] }}"><a href="{{ url_for('dashboard.validation', categoria=c.label) }}">{{ c.label }}</a></td>
+            <td data-label="Equipos" data-v="{{ c['items'] }}">{{ c['items'] }}</td>
+            <td data-label="Unidades" data-v="{{ c.units }}">{{ c.units }}</td>
+            <td data-label="Registrados" data-v="{{ c.registered }}">{{ c.registered }}</td>
+            <td data-label="Pendientes" data-v="{{ c.pending }}">{{ c.pending }}</td>
+            <td data-label="Sin serial" data-v="{{ c.no_serial }}">{{ c.no_serial }}</td>
+            <td data-label="Avance" data-v="{{ c.pct if c.pct is not none else -1 }}">{{ c.pct|pct }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <form class="card exec-filters" method="get" action="{{ url_for('dashboard.validation') }}">
+    <div class="filters">
+      <div><label for="v-estado">Convalidación</label>
+        <select id="v-estado" name="estado"><option value="">Todas</option>
+          {% for code, label in statuses.items() %}<option value="{{ code }}" {% if code == status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <div><label for="v-cat">{{ columns[4] }}</label>
+        <select id="v-cat" name="categoria"><option value="">Todas</option>
+          {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select></div>
+      <div><label for="v-buscar">Buscar serial o características</label><input id="v-buscar" type="search" name="buscar" maxlength="60" value="{{ text }}"></div>
+      <div class="filter-actions"><button type="submit" class="btn btn-primary">Aplicar</button><a class="btn btn-ghost" href="{{ url_for('dashboard.validation') }}">Limpiar</a></div>
+    </div>
+  </form>
+
+  <section class="card" aria-labelledby="val-tabla-t">
+    <h2 id="val-tabla-t">Matriz de inventario <span class="count-pill">{{ rows|length }}</span></h2>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="num">{{ columns[0] }}</th><th scope="col" data-sort="text">{{ columns[1] }}</th><th scope="col" data-sort="num">{{ columns[2] }}</th>
+          <th scope="col" data-sort="text">{{ columns[3] }}</th><th scope="col" data-sort="text">{{ columns[4] }}</th><th scope="col" data-sort="text">Convalidación</th><th scope="col">Informes</th></tr></thead>
+        <tbody>
+        {% for i in rows %}
+          <tr>
+            <td data-label="{{ columns[0] }}" data-v="{{ i.item_no }}">{{ i.item_no }}</td>
+            <td data-label="{{ columns[1] }}">{% if i.serial %}<code>{{ i.serial }}</code>{% else %}—{% endif %}</td>
+            <td data-label="{{ columns[2] }}" data-v="{{ i.quantity if i.quantity is not none else -1 }}">{{ i.quantity if i.quantity is not none else '—' }}</td>
+            <td data-label="{{ columns[3] }}" class="pre">{{ (i.characteristics or '—')|truncate(120) }}</td>
+            <td data-label="{{ columns[4] }}">{{ i.category or 'Sin categoría' }}</td>
+            <td data-label="Convalidación"><span class="badge badge-val-{{ i.status|lower }}">{{ i.status_label }}</span>{% if i.ambiguous %}<small class="muted"> Varios seriales coinciden</small>{% endif %}</td>
+            <td data-label="Informes">{{ report_links(i.reports) }}</td>
+          </tr>
+        {% else %}<tr><td colspan="7" class="muted">Ningún equipo coincide con los filtros.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <details class="card exec-details" {% if m.duplicates %}open{% endif %}>
+    <summary><h2>Informes duplicados <span class="count-pill">{{ k.delete_candidates }}</span></h2></summary>
+    {% if m.duplicates %}
+    <p class="small muted">Varios informes con el mismo serial. Se sugiere conservar el firmado, si no el cerrado, y si no el más reciente. Nada se elimina solo: revise cada informe y elimínelo desde su página si corresponde.</p>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="text">{{ columns[1] }}</th><th scope="col" data-sort="num">{{ columns[0] }}</th><th scope="col">Conservar</th><th scope="col">Posible eliminación</th></tr></thead>
+        <tbody>
+        {% for d in m.duplicates %}
+          <tr>
+            <td data-label="{{ columns[1] }}"><code>{{ d.serial }}</code></td>
+            <td data-label="{{ columns[0] }}" data-v="{{ d.item_no if d.item_no is not none else -1 }}">{{ d.item_no if d.item_no is not none else 'Fuera de la matriz' }}</td>
+            <td data-label="Conservar">{{ report_links([d.keep]) }}</td>
+            <td data-label="Posible eliminación">{{ report_links(d.others) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="muted">No hay informes con el mismo serial.</p>{% endif %}
+  </details>
+
+  <details class="card exec-details">
+    <summary><h2>Informes fuera de la matriz <span class="count-pill">{{ m.outside|length }}</span></h2></summary>
+    {% if m.outside %}<p class="small muted">Su serial no está en la matriz: puede ser un equipo no inventariado o un serial mal escrito.</p>{{ report_table(m.outside) }}
+    {% else %}<p class="muted">Todos los informes con serial están en la matriz.</p>{% endif %}
+  </details>
+
+  <details class="card exec-details">
+    <summary><h2>Informes sin número de serie <span class="count-pill">{{ m.no_serial_reports|length }}</span></h2></summary>
+    {% if m.no_serial_reports %}{{ report_table(m.no_serial_reports) }}
+    {% else %}<p class="muted">Todos los informes tienen número de serie.</p>{% endif %}
+  </details>
+  {% elif not unavailable %}
+  <div class="notice" role="status">Aún no se ha cargado la matriz de inventario. Cárguela abajo para ver la convalidación.</div>
+  {% endif %}
+
+  <section class="card" aria-labelledby="val-carga-t">
+    <h2 id="val-carga-t">{{ 'Actualizar la matriz' if m else 'Cargar la matriz' }}</h2>
+    {% if m %}<p class="small muted">Vigente: {{ m.import.file_name }} · {{ m.import.item_count }} equipos · cargada el {{ m.import.imported_at|localdt }} por {{ m.import.imported_by_name }}.</p>{% endif %}
+    <p class="small muted">Excel (.xlsx) con las columnas {{ columns|join(', ') }}. La carga nueva reemplaza a la vigente en el tablero; no modifica ningún informe.</p>
+    <form method="post" action="{{ url_for('dashboard.upload_matrix') }}" enctype="multipart/form-data" data-busy>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="v-archivo">Archivo de la matriz</label>
+      <input id="v-archivo" name="archivo" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      <button type="submit" class="btn btn-primary">Cargar matriz</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

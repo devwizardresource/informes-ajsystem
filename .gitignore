@@ -7,6 +7,9 @@ backups/
 *.manifest.json
 *.sha256
 
+# Matrices de clientes: el repositorio es público
+resources/*.xlsx
+
 # Python
 .venv/
 .venv-runtime/

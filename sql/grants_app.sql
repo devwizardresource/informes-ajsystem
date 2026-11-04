@@ -31,3 +31,7 @@ GRANT SELECT, INSERT, UPDATE ON `{db}`.reopen_requests TO '{app_user}'@'{app_hos
 -- Migración 0005: firma de perfil e invitaciones de primer acceso.
 GRANT SELECT, INSERT, UPDATE ON `{db}`.user_signatures  TO '{app_user}'@'{app_host}';
 GRANT SELECT, INSERT, UPDATE ON `{db}`.user_invitations TO '{app_user}'@'{app_host}';
+
+-- Migración 0009: matriz de inventario (cada carga es un lote nuevo: sin UPDATE ni DELETE).
+GRANT SELECT, INSERT ON `{db}`.inventory_imports TO '{app_user}'@'{app_host}';
+GRANT SELECT, INSERT ON `{db}`.inventory_items   TO '{app_user}'@'{app_host}';

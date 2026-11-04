@@ -10,6 +10,8 @@
     <p>Rendimiento de los técnicos e inventario auditado · informes creados del <b>{{ date_from.strftime('%d/%m/%Y') }}</b> al <b>{{ date_to.strftime('%d/%m/%Y') }}</b> ({{ d.days }} día{{ '' if d.days == 1 else 's' }}){% if owner_id %} · técnico: <b>{{ (owners|selectattr('id', 'equalto', owner_id)|first).full_name }}</b>{% endif %}</p>
   </section>
 
+  {% include "_tablero_tabs.html" %}
+
   <form class="card exec-filters" method="get" action="{{ url_for('dashboard.index') }}">
     <div class="presets" role="group" aria-label="Rango rápido">
       {% for key, label in (('7', '7 días'), ('30', '30 días'), ('90', '90 días'), ('365', '12 meses')) %}
@@ -29,6 +31,22 @@
 
   {% if notice %}<div class="notice notice-info" role="status">{{ notice }}</div>{% endif %}
   {% if d.truncated %}<div class="notice" role="status">El periodo tiene más informes de los que se analizan a la vez; acote las fechas para ver cifras completas.</div>{% endif %}
+
+  <section class="card" aria-labelledby="avance-t">
+    <h2 id="avance-t">Avance frente a la matriz de inventario</h2>
+    {% if matrix %}
+    {% set mk = matrix.kpi %}
+    <div class="kpis">
+      <div class="kpi"><span class="kpi-n">{{ mk['items'] }}</span><span class="kpi-l">Equipos por auditar</span><small>{{ mk.units }} unidades · {{ mk.with_serial }} con serial</small></div>
+      <div class="kpi is-ok"><span class="kpi-n">{{ mk.registered_pct|pct }}</span><span class="kpi-l">Avance de la auditoría</span><small>{{ mk.registered }} de {{ mk.with_serial }} con informe</small></div>
+      <div class="kpi is-accent"><span class="kpi-n">{{ mk.pending }}</span><span class="kpi-l">Equipos pendientes</span><small>Sin informe con su serial</small></div>
+      <div class="kpi is-warn"><span class="kpi-n">{{ mk.delete_candidates }}</span><span class="kpi-l">Informes duplicados</span><small>Posible eliminación</small></div>
+      <div class="kpi"><span class="kpi-n">{{ matrix.outside|length }}</span><span class="kpi-l">Fuera de la matriz</span><small>Informes con serial no inventariado</small></div>
+    </div>
+    <p class="small muted">Estas cifras son globales: no dependen del periodo ni del técnico elegidos. <a href="{{ url_for('dashboard.validation') }}">Ver la convalidación equipo por equipo</a>.</p>
+    {% elif matrix_unavailable %}<p class="muted">No fue posible consultar la matriz en este momento.</p>
+    {% else %}<p class="muted">Aún no se ha cargado la matriz de inventario. <a href="{{ url_for('dashboard.validation') }}">Cargar la matriz</a>.</p>{% endif %}
+  </section>
 
   <section aria-labelledby="kpi-t">
     <h2 id="kpi-t" class="sr-only">Indicadores clave</h2>
@@ -69,7 +87,7 @@
     <section class="card" aria-labelledby="inv-t">
       <h2 id="inv-t">Inventario por estado del equipo</h2>
       {{ hbars(d.condition) }}
-      <p class="small muted">Cada equipo (marca + número de serie) cuenta una vez, con su informe más reciente del periodo. «Sin dato»: el campo Estado no se diligenció.</p>
+      <p class="small muted">Cada equipo (número de serie) cuenta una vez, con su informe más reciente del periodo. «Sin dato»: el campo Estado no se diligenció.</p>
     </section>
     <section class="card" aria-labelledby="disp-t">
       <h2 id="disp-t">Inventario por tipo de dispositivo</h2>
@@ -166,6 +184,6 @@
   </details>
   {% endfor %}
 
-  <p class="small muted">Fuente: informes no eliminados creados en el periodo, leídos directamente de la base de datos sin modificarla. Los equipos se identifican por marca y número de serie; los informes sin número de serie cuentan como equipos distintos.</p>
+  <p class="small muted">Fuente: informes no eliminados creados en el periodo, leídos directamente de la base de datos sin modificarla. Los equipos se identifican por número de serie; los informes sin número de serie cuentan como equipos distintos.</p>
 </div>
 {% endblock %}

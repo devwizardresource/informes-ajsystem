@@ -1,0 +1,4 @@
+<nav class="tabs" aria-label="Tableros">
+  <a href="{{ url_for('dashboard.index') }}" {% if request.endpoint == 'dashboard.index' %}aria-current="page"{% endif %}>Rendimiento e inventario</a>
+  <a href="{{ url_for('dashboard.validation') }}" {% if request.endpoint == 'dashboard.validation' %}aria-current="page"{% endif %}>Convalidación de inventario</a>
+</nav>

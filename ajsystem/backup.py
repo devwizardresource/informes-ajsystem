@@ -28,7 +28,7 @@ from .migrations import default_collation
 
 TABLES = ["roles", "permissions", "role_permissions", "users", "sessions", "report_statuses", "report_counters",
           "reports", "report_versions", "report_events", "audit_log", "audit_chain_head", "system_settings",
-          "report_attachments", "reopen_requests", "schema_migrations"]
+          "report_attachments", "reopen_requests", "schema_migrations", "inventory_imports", "inventory_items"]
 _DBNAME = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
 

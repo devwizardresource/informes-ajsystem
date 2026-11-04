@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from zoneinfo import ZoneInfo
 
 from . import db
+from .reports.inventory import normalize_serial
 from .reports.service import CERRADO, CLOSED, EN_ELABORACION, ENVIADO, FIRMADO, REABIERTO, STATUS_LABELS
 
 MONTHS = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
@@ -160,10 +161,8 @@ def normalize_brands(values: list[str | None]) -> list[str | None]:
 
 
 def _equipment_key(row: dict) -> str:
-    serial = (row["equipment_serial"] or "").strip().upper()
-    if not serial:
-        return f"informe:{row['id']}"  # sin número de serie no se puede saber si es el mismo equipo
-    return f"{_brand_key(row['equipment_brand']).upper()}|{serial}"
+    serial = normalize_serial(row["equipment_serial"])
+    return serial or f"informe:{row['id']}"  # sin número de serie no se puede saber si es el mismo equipo
 
 
 def _distribution(values: list[str | None], top: int | None = None) -> list[dict]:
@@ -267,7 +266,7 @@ def executive(date_from: dt.date, date_to: dt.date, owner_id: int | None, tz_nam
         t["cells"] = [{"n": n, "level": level(n, top_day_tech), "tip": f"{t['name']} · {n} informe"
                        f"{'' if n == 1 else 's'} · {days[i].strftime('%d/%m/%Y')}"} for i, n in enumerate(t["by_day"])]
 
-    # Inventario: un equipo (marca + serie) cuenta una vez, con su informe más reciente del rango.
+    # Inventario: un equipo (número de serie) cuenta una vez, con su informe más reciente del rango.
     latest: dict[str, dict] = {}
     for r in rows:
         latest[_equipment_key(r)] = r  # rows viene en orden cronológico

@@ -171,6 +171,11 @@ legend { font-weight: 700; padding: 0 6px; }
 .badge-reabierto { background: #f6e9fb; color: #6a1b8a; border-color: #d3a8e6; }
 .badge-firmado { background: #e3f6ea; color: var(--ok); border-color: #7cc898; }
 .badge-firmado::before { content: "✓ "; }
+.badge-val-registrado { background: #e3f6ea; color: var(--ok); border-color: #7cc898; }
+.badge-val-parcial { background: #eef6ff; color: #23408e; border-color: #a9c3ea; }
+.badge-val-duplicado { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
+.badge-val-pendiente { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
+.badge-val-sin_serial { background: #f1f2f6; color: #555e72; border-color: #cdd2de; }
 .badge-out-exito { background: #e9f7ef; color: var(--ok); border-color: #9fd3b0; }
 .badge-out-fallo, .badge-out-error { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
 .badge-out-denegado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
@@ -276,6 +281,7 @@ legend { font-weight: 700; padding: 0 6px; }
 
 /* ---------- Tablero ejecutivo ---------- */
 .exec-hero p b { color: #fff; }
+.val-report { white-space: nowrap; margin: 2px 0; }
 .exec-filters { display: grid; gap: 8px; }
 .exec-filters .presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .exec-filters label { margin-top: 4px; }

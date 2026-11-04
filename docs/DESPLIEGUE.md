@@ -110,3 +110,7 @@ Las migraciones irreversibles o destructivas **no** se ejecutan sin respaldo ver
 | `ajsys_app` | Aplicación web | Mínimos, según `sql/grants_app.sql` |
 
 En producción, restrinja el host de las cuentas (`--account-host localhost` o la IP del servidor de aplicación) en lugar de `%`.
+
+## Matriz de inventario
+
+La matriz de equipos a auditar **no se guarda en el repositorio** (es público y `resources/*.xlsx` está ignorado). El Director la carga en **Tablero → Convalidación de inventario** y queda en la base (`inventory_imports`, `inventory_items`), así que sobrevive a los despliegues y entra en los respaldos. Cada carga crea un lote nuevo; la vigente es la última.

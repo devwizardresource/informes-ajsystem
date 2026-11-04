@@ -33,7 +33,7 @@ El nombre visible se cambia sin tocar el código, desde **Usuarios → Nombres v
 | `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ |
 | `users.manage` · incluye **eliminar usuarios** (eliminación lógica) | ✔ | ✘ | ✘ |
 | `report.sign_closed` · firmar como quien recibe / aprueba un informe **cerrado** | ✔ | ✘ | ✘ |
-| `dashboard.executive` · **Tablero ejecutivo** (`/tablero`) | ✔ | ✘ | ✘ |
+| `dashboard.executive` · **Tablero ejecutivo** (`/tablero`) y **Convalidación de inventario** (`/tablero/convalidacion`, incluye cargar la matriz) | ✔ | ✘ | ✘ |
 | `home.activity` · panel «Mi actividad» en Inicio (solo los informes propios) | ✘ | ✘ | ✔ |
 
 Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la ruta y la cuenta de base de datos de la aplicación carece de `UPDATE`/`DELETE` sobre esas tablas.
