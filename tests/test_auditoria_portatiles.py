@@ -132,7 +132,7 @@ def test_panel_de_portatiles_muestra_y_escapa(scenario):
 
 
 def test_filtros_del_panel_toleran_valores_invalidos(scenario):
-    b = scenario["bt"]
+    b = scenario["bd"]
     for qs in ("dictamen=%27OR1", "categoria=%3Cx%3E", "tecnico=abc", "tecnico=999999999", "buscar=" + "x" * 500):
         assert b.get(f"/tablero/portatiles?{qs}").status_code == 200
     filtered = b.get("/tablero/portatiles?dictamen=NO_APTO").get_data(as_text=True)
@@ -141,17 +141,26 @@ def test_filtros_del_panel_toleran_valores_invalidos(scenario):
 
 def test_tecnico_consulta_sin_modificar_ni_abrir_informes_ajenos(scenario):
     b = scenario["bt"]
-    for path in ("/tablero", "/tablero/convalidacion", "/tablero/portatiles"):
+    for path in ("/tablero", "/tablero/convalidacion"):
         page = b.get(path)
         assert page.status_code == 200
         html = page.get_data(as_text=True)
         assert "Cargar matriz" not in html and 'name="archivo"' not in html
-    html = b.get("/tablero/portatiles").get_data(as_text=True)
+        assert "/tablero/portatiles" not in html and "Auditoría de portátiles" not in html
+    html = b.get("/tablero/convalidacion").get_data(as_text=True)
     assert f'/informes/{scenario["ok_id"]}"' in html  # propio: enlazado
     assert f'/informes/{scenario["bad_id"]}"' not in html  # ajeno: solo el código
     assert b.get(f'/informes/{scenario["bad_id"]}').status_code == 404
-    assert b.post("/tablero/convalidacion/matriz", csrf_from="/tablero/portatiles").status_code == 403
+    assert b.post("/tablero/convalidacion/matriz", csrf_from="/tablero/convalidacion").status_code == 403
     assert scenario["bd"].get(f'/informes/{scenario["bad_id"]}').status_code == 200
+
+
+def test_auditoria_de_portatiles_vedada_al_tecnico(scenario, browser, make_user):
+    assert scenario["bt"].get("/tablero/portatiles").status_code == 403
+    assert scenario["bt"].get("/tablero/portatiles?dictamen=NO_APTO&buscar=x").status_code == 403
+    jefe = browser(make_user("JEFE"))
+    assert jefe.get("/tablero/portatiles").status_code == 200
+    assert "/tablero/portatiles" in jefe.get("/tablero").get_data(as_text=True)
 
 
 def test_sin_sesion_no_hay_panel(browser):
@@ -160,5 +169,5 @@ def test_sin_sesion_no_hay_panel(browser):
 
 def test_panel_sin_matriz_no_falla(browser, make_user, monkeypatch):
     monkeypatch.setattr(inventory, "reconcile", lambda: None)
-    page = browser(make_user("TECNICO")).get("/tablero/portatiles")
+    page = browser(make_user("JEFE")).get("/tablero/portatiles")
     assert page.status_code == 200 and "Aún no se ha cargado" in page.get_data(as_text=True)

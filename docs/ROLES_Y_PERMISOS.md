@@ -33,7 +33,7 @@ El nombre visible se cambia sin tocar el código, desde **Usuarios → Nombres v
 | `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ |
 | `users.manage` · incluye **eliminar usuarios** (eliminación lógica) | ✔ | ✘ | ✘ |
 | `report.sign_closed` · firmar como quien recibe / aprueba un informe **cerrado** | ✔ | ✘ | ✘ |
-| `dashboard.view` · **consultar y filtrar** el Tablero: rendimiento (`/tablero`), Convalidación (`/tablero/convalidacion`) y Auditoría de portátiles (`/tablero/portatiles`), sin modificar nada (migración 0010) | ✔ | ✔ | ✔ |
+| `dashboard.view` · **consultar y filtrar** el Tablero: rendimiento (`/tablero`) y Convalidación (`/tablero/convalidacion`), sin modificar nada (migración 0010). La Auditoría de portátiles (`/tablero/portatiles`) exige además `report.view_all`: el técnico no la ve | ✔ | ✔ | ✔ |
 | `dashboard.executive` · **administrar el tablero**: cargar la matriz de inventario | ✔ | ✘ | ✘ |
 | `home.activity` · panel «Mi actividad» en Inicio (solo los informes propios) | ✘ | ✘ | ✔ |
 

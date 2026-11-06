@@ -1,4 +1,5 @@
-"""Tablero: consulta y filtros con dashboard.view; cargar la matriz exige dashboard.executive (Director)."""
+"""Tablero: consulta y filtros con dashboard.view; la auditoría de portátiles exige además report.view_all
+(Director y Jefe) y cargar la matriz, dashboard.executive (Director)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -90,7 +91,7 @@ def validation():
 
 
 @bp.route("/portatiles")
-@require_perm("dashboard.view")
+@require_perm("dashboard.view", "report.view_all")
 def laptops():
     matrix, unavailable = _reconciliation()
     audit_data = inventory.laptop_audit(matrix) if matrix else None
