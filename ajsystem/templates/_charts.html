@@ -52,7 +52,7 @@
 </ul>
 {%- endmacro %}
 
-{% macro donut(items, total, label) -%}
+{% macro donut(items, total, label, unit='informes') -%}
 {% set ns = namespace(acc=0) %}
 <div class="donut-wrap">
   <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ label }}">
@@ -61,7 +61,7 @@
     <circle class="donut-seg s-{{ it.code|lower }}" cx="21" cy="21" r="15.915" stroke-dasharray="{{ p }} {{ 100 - p }}" stroke-dashoffset="{{ 25 - ns.acc }}"
             data-tip="{{ it.label }} · {{ it.n }} · {{ it.pct|pct }}"></circle>{% set ns.acc = ns.acc + p %}
     {% endfor %}{% endif %}
-    <text class="donut-n" x="21" y="21">{{ total }}</text><text class="donut-l" x="21" y="27">informes</text>
+    <text class="donut-n" x="21" y="21">{{ total }}</text><text class="donut-l" x="21" y="27">{{ unit }}</text>
   </svg>
   <ul class="donut-legend">
     {% for it in items %}<li><i class="s-{{ it.code|lower }}"></i>{{ it.label }} <b>{{ it.n }}</b> <small>{{ it.pct|pct }}</small></li>{% endfor %}

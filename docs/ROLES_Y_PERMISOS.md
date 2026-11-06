@@ -33,7 +33,8 @@ El nombre visible se cambia sin tocar el código, desde **Usuarios → Nombres v
 | `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ |
 | `users.manage` · incluye **eliminar usuarios** (eliminación lógica) | ✔ | ✘ | ✘ |
 | `report.sign_closed` · firmar como quien recibe / aprueba un informe **cerrado** | ✔ | ✘ | ✘ |
-| `dashboard.executive` · **Tablero ejecutivo** (`/tablero`) y **Convalidación de inventario** (`/tablero/convalidacion`, incluye cargar la matriz) | ✔ | ✘ | ✘ |
+| `dashboard.view` · **consultar y filtrar** el Tablero: rendimiento (`/tablero`), Convalidación (`/tablero/convalidacion`) y Auditoría de portátiles (`/tablero/portatiles`), sin modificar nada (migración 0010) | ✔ | ✔ | ✔ |
+| `dashboard.executive` · **administrar el tablero**: cargar la matriz de inventario | ✔ | ✘ | ✘ |
 | `home.activity` · panel «Mi actividad» en Inicio (solo los informes propios) | ✘ | ✘ | ✔ |
 
 Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la ruta y la cuenta de base de datos de la aplicación carece de `UPDATE`/`DELETE` sobre esas tablas.
@@ -43,6 +44,7 @@ Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la
 - **Visibilidad** (se aplica en el `WHERE` de todas las consultas):
   - Director y jefe: **todos** (`report.view_all`).
   - Técnico: **solo los propios** (desde la migración 0008, 2026-10-28).
+- El **Tablero** muestra cifras y observaciones de todos los equipos a quien tenga `dashboard.view`, pero sus enlaces solo llevan a informes que el usuario puede abrir: el técnico ve los códigos ajenos sin enlace.
 - Un informe ajeno o no visible responde **404** (no revela si existe) y queda registrado como `ACCESO_DENEGADO`.
 - La **edición** solo es posible en estado EN_ELABORACION o REABIERTO; el técnico edita los suyos y la dirección cualquiera (`report.edit_any`).
 - **Cerrar es el último paso** (el paso «Enviar» se retiró el 2026-10-28): el informe queda bloqueado y pendiente de la firma del Director. Los informes antiguos en estado ENVIADO se muestran y se filtran como «Cerrado»; no se modificó ningún dato.

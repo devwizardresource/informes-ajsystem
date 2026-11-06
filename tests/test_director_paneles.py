@@ -118,9 +118,9 @@ def test_calendario_de_actividad_estructura(app, make_user):
 
 
 # ---------------------------------------------------------------- tablero ejecutivo
-def test_tablero_solo_para_el_director(browser, make_user):
-    assert browser(make_user("TECNICO")).get("/tablero").status_code == 403
-    assert browser(make_user("JEFE")).get("/tablero").status_code == 403
+def test_tablero_visible_para_todos_los_perfiles(browser, make_user):
+    assert browser(make_user("TECNICO")).get("/tablero").status_code == 200
+    assert browser(make_user("JEFE")).get("/tablero").status_code == 200
     assert browser().get("/tablero").status_code == 302  # sin sesión: a iniciar sesión
     r = browser(make_user("RESPONSABLE")).get("/tablero")
     assert r.status_code == 200 and "Tablero ejecutivo" in r.get_data(as_text=True)

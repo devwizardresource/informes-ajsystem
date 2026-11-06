@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_badge with context %}
+{% from "_macros.html" import status_badge, report_code with context %}
 {% block title %}Convalidación de inventario{% endblock %}
 {% macro report_links(rs) -%}
-{% for r in rs %}<div class="val-report"><a href="{{ url_for('reports.detail', report_id=r.id) }}"><code>{{ r.code }}</code></a> {{ status_badge(r.status_code, r.signed) }}{% if r.delete_candidate %} <span class="badge badge-val-duplicado">Posible eliminación</span>{% endif %}</div>{% else %}—{% endfor %}
+{% for r in rs %}<div class="val-report">{{ report_code(r) }} {{ status_badge(r.status_code, r.signed) }}{% if r.delete_candidate %} <span class="badge badge-val-duplicado">Posible eliminación</span>{% endif %}</div>{% else %}—{% endfor %}
 {%- endmacro %}
 {% macro report_table(rs) -%}
 <div class="table-wrap">
@@ -12,7 +12,7 @@
     <tbody>
     {% for r in rs %}
       <tr>
-        <td data-label="Informe"><a href="{{ url_for('reports.detail', report_id=r.id) }}"><code>{{ r.code }}</code></a></td>
+        <td data-label="Informe">{{ report_code(r) }}</td>
         <td data-label="Equipo">{{ r.title or '—' }}</td>
         <td data-label="Marca · serie">{{ r.equipment_brand or 'Sin dato' }}{% if r.equipment_serial %} · <code>{{ r.equipment_serial }}</code>{% endif %}</td>
         <td data-label="Técnico">{{ r.owner_name }}</td>
@@ -51,6 +51,36 @@
     </div>
   </section>
 
+  <section class="card" aria-labelledby="val-tipo-t">
+    <h2 id="val-tipo-t">Por tipo de dispositivo</h2>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="text">Tipo</th><th scope="col" data-sort="num">Equipos</th><th scope="col" data-sort="num">Unidades</th>
+          <th scope="col" data-sort="num">Registrados</th><th scope="col" data-sort="num">Pendientes</th><th scope="col" data-sort="num">Sin serial</th><th scope="col" data-sort="num">Avance</th>
+          <th scope="col" data-sort="num">Óptimos</th><th scope="col" data-sort="num">Con observaciones</th><th scope="col" data-sort="num">No aptos</th><th scope="col" data-sort="num">Sin evidencia</th><th scope="col" data-sort="num">En auditoría</th></tr></thead>
+        <tbody>
+        {% for t in m.devices %}
+          <tr>
+            <td data-label="Tipo"><a href="{{ url_for('dashboard.validation', tipo=t.code) }}">{{ t.label }}</a></td>
+            <td data-label="Equipos" data-v="{{ t['items'] }}">{{ t['items'] }}</td>
+            <td data-label="Unidades" data-v="{{ t.units }}">{{ t.units }}</td>
+            <td data-label="Registrados" data-v="{{ t.registered }}">{{ t.registered }}</td>
+            <td data-label="Pendientes" data-v="{{ t.pending }}">{{ t.pending }}</td>
+            <td data-label="Sin serial" data-v="{{ t.no_serial }}">{{ t.no_serial }}</td>
+            <td data-label="Avance" data-v="{{ t.pct if t.pct is not none else -1 }}">{{ t.pct|pct }}</td>
+            <td data-label="Óptimos" data-v="{{ t.optimal }}">{{ t.optimal }}</td>
+            <td data-label="Con observaciones" data-v="{{ t.observed }}">{{ t.observed }}</td>
+            <td data-label="No aptos" data-v="{{ t.unfit }}">{{ t.unfit }}</td>
+            <td data-label="Sin evidencia" data-v="{{ t.no_evidence }}">{{ t.no_evidence }}</td>
+            <td data-label="En auditoría" data-v="{{ t.in_progress }}">{{ t.in_progress }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">El tipo se deduce de «Características» en la matriz. Una fila de la matriz es un equipo; «Unidades» suma «Cantidad por dispositivo» (una fila puede agrupar varios periféricos). El dictamen sale de lo registrado en el informe cerrado de cada equipo; los informes fuera de la matriz no entran en estas cifras.</p>
+  </section>
+
   <section class="card" aria-labelledby="val-cat-t">
     <h2 id="val-cat-t">Avance por categoría</h2>
     <div class="table-wrap">
@@ -80,6 +110,14 @@
         <select id="v-estado" name="estado"><option value="">Todas</option>
           {% for code, label in statuses.items() %}<option value="{{ code }}" {% if code == status %}selected{% endif %}>{{ label }}</option>{% endfor %}
         </select></div>
+      <div><label for="v-tipo">Tipo de dispositivo</label>
+        <select id="v-tipo" name="tipo"><option value="">Todos</option>
+          {% for code, label in devices.items() %}<option value="{{ code }}" {% if code == device %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <div><label for="v-dict">Dictamen</label>
+        <select id="v-dict" name="dictamen"><option value="">Todos</option>
+          {% for code, label in opinions.items() %}<option value="{{ code }}" {% if code == opinion %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
       <div><label for="v-cat">{{ columns[4] }}</label>
         <select id="v-cat" name="categoria"><option value="">Todas</option>
           {% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}
@@ -93,20 +131,22 @@
     <h2 id="val-tabla-t">Matriz de inventario <span class="count-pill">{{ rows|length }}</span></h2>
     <div class="table-wrap">
       <table class="table table-dense" data-sortable>
-        <thead><tr><th scope="col" data-sort="num">{{ columns[0] }}</th><th scope="col" data-sort="text">{{ columns[1] }}</th><th scope="col" data-sort="num">{{ columns[2] }}</th>
-          <th scope="col" data-sort="text">{{ columns[3] }}</th><th scope="col" data-sort="text">{{ columns[4] }}</th><th scope="col" data-sort="text">Convalidación</th><th scope="col">Informes</th></tr></thead>
+        <thead><tr><th scope="col" data-sort="num">{{ columns[0] }}</th><th scope="col" data-sort="text">{{ columns[1] }}</th><th scope="col" data-sort="text">Tipo</th><th scope="col" data-sort="num">{{ columns[2] }}</th>
+          <th scope="col" data-sort="text">{{ columns[3] }}</th><th scope="col" data-sort="text">{{ columns[4] }}</th><th scope="col" data-sort="text">Convalidación</th><th scope="col" data-sort="text">Dictamen</th><th scope="col">Informes</th></tr></thead>
         <tbody>
         {% for i in rows %}
           <tr>
             <td data-label="{{ columns[0] }}" data-v="{{ i.item_no }}">{{ i.item_no }}</td>
             <td data-label="{{ columns[1] }}">{% if i.serial %}<code>{{ i.serial }}</code>{% else %}—{% endif %}</td>
+            <td data-label="Tipo">{{ i.device_label }}</td>
             <td data-label="{{ columns[2] }}" data-v="{{ i.quantity if i.quantity is not none else -1 }}">{{ i.quantity if i.quantity is not none else '—' }}</td>
             <td data-label="{{ columns[3] }}" class="pre">{{ (i.characteristics or '—')|truncate(120) }}</td>
             <td data-label="{{ columns[4] }}">{{ i.category or 'Sin categoría' }}</td>
             <td data-label="Convalidación"><span class="badge badge-val-{{ i.status|lower }}">{{ i.status_label }}</span>{% if i.ambiguous %}<small class="muted"> Varios seriales coinciden</small>{% endif %}</td>
+            <td data-label="Dictamen"><span class="badge badge-dict-{{ i.verdict.code|lower }}">{{ i.verdict.label }}</span>{% if i.verdict.findings %}<small class="muted dict-why">{{ i.verdict.findings[0].label }}</small>{% endif %}</td>
             <td data-label="Informes">{{ report_links(i.reports) }}</td>
           </tr>
-        {% else %}<tr><td colspan="7" class="muted">Ningún equipo coincide con los filtros.</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="9" class="muted">Ningún equipo coincide con los filtros.</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>
@@ -146,9 +186,10 @@
     {% else %}<p class="muted">Todos los informes tienen número de serie.</p>{% endif %}
   </details>
   {% elif not unavailable %}
-  <div class="notice" role="status">Aún no se ha cargado la matriz de inventario. Cárguela abajo para ver la convalidación.</div>
+  <div class="notice" role="status">Aún no se ha cargado la matriz de inventario.{% if has_perm('dashboard.executive') %} Cárguela abajo para ver la convalidación.{% endif %}</div>
   {% endif %}
 
+  {% if has_perm('dashboard.executive') %}
   <section class="card" aria-labelledby="val-carga-t">
     <h2 id="val-carga-t">{{ 'Actualizar la matriz' if m else 'Cargar la matriz' }}</h2>
     {% if m %}<p class="small muted">Vigente: {{ m.import.file_name }} · {{ m.import.item_count }} equipos · cargada el {{ m.import.imported_at|localdt }} por {{ m.import.imported_by_name }}.</p>{% endif %}
@@ -160,5 +201,6 @@
       <button type="submit" class="btn btn-primary">Cargar matriz</button>
     </form>
   </section>
+  {% endif %}
 </div>
 {% endblock %}

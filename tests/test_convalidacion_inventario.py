@@ -43,10 +43,11 @@ def test_normaliza_seriales(value, expected):
     assert inventory.normalize_serial(value) == expected
 
 
-def test_solo_el_director_accede(browser, make_user):
+def test_solo_el_director_carga_la_matriz(browser, make_user):
     for role in ("TECNICO", "JEFE"):
         b = browser(make_user(role))
-        assert b.get("/tablero/convalidacion").status_code == 403
+        page = b.get("/tablero/convalidacion")
+        assert page.status_code == 200 and "Cargar matriz" not in page.get_data(as_text=True)
         assert b.post("/tablero/convalidacion/matriz", csrf_from="/").status_code == 403
     assert browser().get("/tablero/convalidacion").status_code == 302
 

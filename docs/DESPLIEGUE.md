@@ -114,3 +114,12 @@ En producción, restrinja el host de las cuentas (`--account-host localhost` o l
 ## Matriz de inventario
 
 La matriz de equipos a auditar **no se guarda en el repositorio** (es público y `resources/*.xlsx` está ignorado). El Director la carga en **Tablero → Convalidación de inventario** y queda en la base (`inventory_imports`, `inventory_items`), así que sobrevive a los despliegues y entra en los respaldos. Cada carga crea un lote nuevo; la vigente es la última.
+
+## Tipos de dispositivo y dictamen de auditoría
+
+Ambos se calculan al consultar el tablero, sin guardar nada: una matriz nueva o un informe corregido se reflejan de inmediato.
+
+- **Tipo** (`inventory.device_type`): sale de «Características» en la matriz. Lo que no se reconoce queda «Sin clasificar», nunca se adivina.
+- **Dictamen** (`reports/verdict.py`): se emite solo con informe cerrado, a partir del campo Estado y de los textos técnicos. Si los técnicos usan una expresión de daño nueva, se añade como regla en ese archivo con su prueba en `tests/test_auditoria_portatiles.py`.
+- Los informes fuera de la matriz no se tocan ni entran en estas cifras.
+

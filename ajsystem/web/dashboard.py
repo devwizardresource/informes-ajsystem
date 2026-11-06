@@ -1,4 +1,4 @@
-"""Tablero ejecutivo (solo Director: permiso dashboard.executive). Solo lectura."""
+"""Tablero: consulta y filtros con dashboard.view; cargar la matriz exige dashboard.executive (Director)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -7,7 +7,7 @@ import pymysql
 from flask import Blueprint, current_app, flash, g, redirect, render_template, request, url_for
 
 from .. import analytics, audit, users
-from ..reports import importer, inventory
+from ..reports import importer, inventory, verdict
 from ..security.authz import require_perm
 
 bp = Blueprint("dashboard", __name__, url_prefix="/tablero")
@@ -31,7 +31,7 @@ def _date(value: str | None) -> dt.date | None:
 
 
 @bp.route("")
-@require_perm("dashboard.executive")
+@require_perm("dashboard.view")
 def index():
     tz_name = current_app.config["AJS_SETTINGS"].timezone
     today = analytics.local_today(tz_name)
@@ -64,11 +64,13 @@ def index():
 
 
 @bp.route("/convalidacion")
-@require_perm("dashboard.executive")
+@require_perm("dashboard.view")
 def validation():
     matrix, unavailable = _reconciliation()
     args = request.args
     status = args.get("estado") if args.get("estado") in inventory.STATUS_LABELS else ""
+    device = args.get("tipo") if args.get("tipo") in inventory.DEVICE_LABELS else ""
+    opinion = args.get("dictamen") if args.get("dictamen") in verdict.LABELS else ""
     text = args.get("buscar", "").strip()[:60]
     rows, categories, category = [], [], ""
     if matrix:
@@ -77,11 +79,42 @@ def validation():
         needle = text.casefold()
         rows = [i for i in matrix["items"]
                 if (not status or i["status"] == status)
+                and (not device or i["device"] == device)
+                and (not opinion or i["verdict"]["code"] == opinion)
                 and (not category or (i["category"] or "Sin categoría") == category)
                 and (not needle or needle in f"{i['serial'] or ''} {i['characteristics'] or ''}".casefold())]
     return render_template("validation.html", m=matrix, unavailable=unavailable, rows=rows, status=status,
                            category=category, categories=categories, text=text,
-                           statuses=inventory.STATUS_LABELS, columns=inventory.COLUMNS)
+                           statuses=inventory.STATUS_LABELS, columns=inventory.COLUMNS, device=device,
+                           devices=inventory.DEVICE_LABELS, opinion=opinion, opinions=verdict.LABELS)
+
+
+@bp.route("/portatiles")
+@require_perm("dashboard.view")
+def laptops():
+    matrix, unavailable = _reconciliation()
+    audit_data = inventory.laptop_audit(matrix) if matrix else None
+    args = request.args
+    opinion = args.get("dictamen") if args.get("dictamen") in verdict.LABELS else ""
+    text = args.get("buscar", "").strip()[:60]
+    rows, category, owner_id = [], "", None
+    if audit_data:
+        category = args.get("categoria") if args.get("categoria") in {c["label"] for c in audit_data["categories"]} else ""
+        try:
+            owner_id = int(args.get("tecnico") or 0) or None
+        except ValueError:
+            owner_id = None
+        if owner_id not in {t["id"] for t in audit_data["technicians"]}:
+            owner_id = None
+        needle = text.casefold()
+        rows = [i for i in audit_data["items"]
+                if (not opinion or i["verdict"]["code"] == opinion)
+                and (not category or (i["category"] or "Sin categoría") == category)
+                and (not owner_id or (i["report"] and i["report"]["owner_id"] == owner_id))
+                and (not needle or needle in f"{i['serial'] or ''} {i['characteristics'] or ''}".casefold())]
+    today = analytics.local_today(current_app.config["AJS_SETTINGS"].timezone)
+    return render_template("laptops.html", m=matrix, a=audit_data, unavailable=unavailable, rows=rows, opinion=opinion,
+                           opinions=verdict.LABELS, category=category, owner_id=owner_id, text=text, today=today)
 
 
 @bp.route("/convalidacion/matriz", methods=["POST"])

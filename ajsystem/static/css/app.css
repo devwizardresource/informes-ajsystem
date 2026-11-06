@@ -176,6 +176,14 @@ legend { font-weight: 700; padding: 0 6px; }
 .badge-val-duplicado { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
 .badge-val-pendiente { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
 .badge-val-sin_serial { background: #f1f2f6; color: #555e72; border-color: #cdd2de; }
+.badge-dict-optimo { background: #e6f0fa; color: #1565a8; border-color: #a9c8e8; }
+.badge-dict-observaciones { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
+.badge-dict-no_apto { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
+.badge-dict-sin_evidencia, .badge-dict-en_auditoria, .badge-dict-pendiente, .badge-dict-sin_serial { background: #f1f2f6; color: #555e72; border-color: #cdd2de; }
+.badge-sev-3 { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
+.badge-sev-2 { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
+.badge-sev-1 { background: #f1f2f6; color: #555e72; border-color: #cdd2de; }
+.dict-why { display: block; margin-top: 2px; }
 .badge-out-exito { background: #e9f7ef; color: var(--ok); border-color: #9fd3b0; }
 .badge-out-fallo, .badge-out-error { background: #fdecec; color: var(--danger); border-color: #f0a8a8; }
 .badge-out-denegado { background: #fff4e5; color: #8a4600; border-color: #f0c48a; }
@@ -291,6 +299,7 @@ legend { font-weight: 700; padding: 0 6px; }
 .kpi.is-warn::after { background: linear-gradient(90deg, #ffb35c, var(--warn)); }
 .kpi.is-accent::after { background: linear-gradient(90deg, var(--violet), #ff5ca8); }
 .kpi.is-ok::after { background: linear-gradient(90deg, #3ccf7a, var(--ok)); }
+.kpi.is-danger::after { background: linear-gradient(90deg, #ff7a6e, var(--danger)); }
 .kpi small a { color: #8fe3ff; }
 .kpi-n { font-size: 1.75rem; font-weight: 800; line-height: 1.15; }
 .kpi-l { font-weight: 600; color: #d6ddef; }
@@ -335,6 +344,22 @@ legend { font-weight: 700; padding: 0 6px; }
 .s-reabierto { stroke: #b45cff; background: #b45cff; }
 .s-cerrado { stroke: #f0a23c; background: #f0a23c; }
 .s-firmado { stroke: #2fb36a; background: #2fb36a; }
+.s-optimo { stroke: #1565a8; background: #1565a8; }
+.s-observaciones { stroke: #c77700; background: #c77700; }
+.s-no_apto { stroke: #b3261e; background: #b3261e; }
+.s-sin_evidencia { stroke: #6f7a8f; background: #6f7a8f; }
+.s-en_auditoria { stroke: #9aa6b8; background: #9aa6b8; }
+.s-pendiente { stroke: #c8d0dc; background: #c8d0dc; }
+.s-sin_serial { stroke: #e1e5ec; background: #e1e5ec; }
+.report-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.report-head h2 { margin: 0; }
+.report-summary p { margin: 10px 0 0; line-height: 1.55; }
+.report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.highlights { list-style: none; margin: 0; padding: 0; }
+.highlights li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.highlights li:first-child { border-top: 0; padding-top: 0; }
+.highlights .badge { flex: 0 0 auto; min-width: 72px; text-align: center; }
+.highlights p { margin: 4px 0 0; overflow-wrap: anywhere; }
 .exec-details summary { cursor: pointer; list-style: none; }
 .exec-details summary::-webkit-details-marker { display: none; }
 .exec-details summary h2 { display: inline-flex; gap: 8px; align-items: center; margin: 0; }
@@ -353,4 +378,22 @@ th[aria-sort="descending"]::after { content: " ▼"; font-size: .7em; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi-n { font-size: 1.4rem; }
   .hbars li { grid-template-columns: minmax(80px, 40%) minmax(0, 1fr) auto; }
+}
+
+@media (max-width: 760px) { .report-grid { grid-template-columns: minmax(0, 1fr); } }
+@media print {
+  .exec-report { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .exec-report .card, .exec-report .kpi, .highlights li { box-shadow: none; break-inside: avoid; }
+  .exec-report .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .exec-report .table-wrap { overflow: visible; }
+  .exec-report .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exec-report .table { display: table; width: 100%; font-size: .78rem; }
+  .exec-report .table thead { display: table-header-group; }
+  .exec-report .table tbody { display: table-row-group; }
+  .exec-report .table tr { display: table-row; }
+  .exec-report .table td, .exec-report .table th { display: table-cell; width: auto; }
+  .exec-report .table td[data-label]::before { content: none; }
+  .exec-report tr { break-inside: avoid; }
+  .flashes { display: none; }
+  @page { size: A4; margin: 12mm; }
 }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_badge with context %}
+{% from "_macros.html" import status_badge, report_code with context %}
 {% from "_charts.html" import day_columns, hbars, donut, heat_legend %}
 {% block title %}Tablero ejecutivo{% endblock %}
 {% block content %}
@@ -45,7 +45,7 @@
     </div>
     <p class="small muted">Estas cifras son globales: no dependen del periodo ni del técnico elegidos. <a href="{{ url_for('dashboard.validation') }}">Ver la convalidación equipo por equipo</a>.</p>
     {% elif matrix_unavailable %}<p class="muted">No fue posible consultar la matriz en este momento.</p>
-    {% else %}<p class="muted">Aún no se ha cargado la matriz de inventario. <a href="{{ url_for('dashboard.validation') }}">Cargar la matriz</a>.</p>{% endif %}
+    {% else %}<p class="muted">Aún no se ha cargado la matriz de inventario.{% if has_perm('dashboard.executive') %} <a href="{{ url_for('dashboard.validation') }}">Cargar la matriz</a>.{% endif %}</p>{% endif %}
   </section>
 
   <section aria-labelledby="kpi-t">
@@ -164,7 +164,7 @@
         <tbody>
         {% for e in block.rows %}
           <tr>
-            <td data-label="Informe"><a href="{{ url_for('reports.detail', report_id=e.id) }}"><code>{{ e.code }}</code></a></td>
+            <td data-label="Informe">{{ report_code(e) }}</td>
             <td data-label="Equipo">{{ e.title or '—' }}</td>
             <td data-label="Dispositivo">{{ e.dispositivo or 'Sin dato' }}</td>
             <td data-label="Marca · serie">{{ e.equipment_brand or 'Sin dato' }}{% if e.equipment_serial %} · <code>{{ e.equipment_serial }}</code>{% endif %}</td>

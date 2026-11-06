@@ -59,3 +59,8 @@
           data-confirm="¿Firmar como Director los {{ total }} informes cerrados pendientes de firma?">Firmar todos los pendientes ({{ total }})</button>
 </form>
 {%- endmacro %}
+
+{# Código del informe: enlaza solo si quien consulta puede abrirlo (el técnico ve el tablero, no los informes ajenos). #}
+{% macro report_code(r) -%}
+{% if has_perm('report.view_all') or r.owner_id == g.user.id %}<a href="{{ url_for('reports.detail', report_id=r.id) }}"><code>{{ r.code }}</code></a>{% else %}<code>{{ r.code }}</code>{% endif %}
+{%- endmacro %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, report_code with context %}
+{% from "_charts.html" import hbars, donut %}
+{% block title %}Auditoría de portátiles{% endblock %}
+{% macro group_table(rows, title) -%}
+<div class="table-wrap">
+  <table class="table table-dense" data-sortable>
+    <thead><tr><th scope="col" data-sort="text">{{ title }}</th><th scope="col" data-sort="num">Portátiles</th><th scope="col" data-sort="num">Auditados</th><th scope="col" data-sort="num">Avance</th>
+      <th scope="col" data-sort="num">Óptimos</th><th scope="col" data-sort="num">Con observaciones</th><th scope="col" data-sort="num">No aptos</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td data-label="{{ title }}">{{ r.label }}</td>
+        <td data-label="Portátiles" data-v="{{ r['items'] }}">{{ r['items'] }}</td>
+        <td data-label="Auditados" data-v="{{ r.issued }}">{{ r.issued }}</td>
+        <td data-label="Avance" data-v="{{ r.pct if r.pct is not none else -1 }}">{{ r.pct|pct }}</td>
+        <td data-label="Óptimos" data-v="{{ r.optimal }}">{{ r.optimal }}</td>
+        <td data-label="Con observaciones" data-v="{{ r.observed }}">{{ r.observed }}</td>
+        <td data-label="No aptos" data-v="{{ r.unfit }}">{{ r.unfit }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+{% macro finding_table(rows, empty) -%}
+{% if rows %}
+<div class="table-wrap">
+  <table class="table table-dense" data-sortable>
+    <thead><tr><th scope="col" data-sort="num">N.°</th><th scope="col" data-sort="text">Serial</th><th scope="col" data-sort="text">Informe</th><th scope="col" data-sort="text">Técnico</th><th scope="col">Hallazgos</th></tr></thead>
+    <tbody>
+    {% for i in rows %}
+      <tr>
+        <td data-label="N.°" data-v="{{ i.item_no }}">{{ i.item_no }}</td>
+        <td data-label="Serial"><code>{{ i.serial }}</code></td>
+        <td data-label="Informe">{{ report_code(i.report) }}</td>
+        <td data-label="Técnico">{{ i.report.owner_name }}</td>
+        <td data-label="Hallazgos">{% for f in i.verdict.findings if f.severity >= 2 %}<div>{{ f.label }}: <span class="muted">«{{ f.excerpt }}»</span></div>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}<p class="muted">{{ empty }}</p>{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="exec exec-report">
+  <section class="hero exec-hero">
+    <h1>Auditoría de portátiles</h1>
+    <p>Resultado de la auditoría de hardware frente a la matriz general de inventario{% if m %} · corte al <b>{{ today.strftime('%d/%m/%Y') }}</b>{% endif %}</p>
+  </section>
+  <div class="no-print">{% include "_tablero_tabs.html" %}</div>
+
+  {% if unavailable %}<div class="notice" role="status">No fue posible consultar la matriz en este momento. Intente de nuevo en unos minutos.</div>{% endif %}
+
+  {% if a %}
+  {% set k = a.kpi %}
+  {% if m.truncated %}<div class="notice" role="status">Hay más informes de los que se analizan a la vez: las cifras pueden estar incompletas.</div>{% endif %}
+  <section class="card report-summary" aria-labelledby="pt-res-t">
+    <div class="report-head">
+      <h2 id="pt-res-t">Resumen ejecutivo</h2>
+      <button type="button" class="btn btn-sm no-print" data-print>Imprimir o guardar en PDF</button>
+    </div>
+    <p>La matriz registra <b>{{ k.total }}</b> portátiles, {{ k.with_serial }} de ellos con número de serie. Se han auditado <b>{{ k.issued }}</b> con informe cerrado, un avance de <b>{{ k.coverage|pct }}</b>.</p>
+    {% if k.issued %}<p>De los auditados, <b>{{ k.fit }}</b> ({{ k.fit_pct|pct }}) pueden operar: {{ k.optimal }} en condición óptima y {{ k.observed }} funcionales con observaciones. <b>{{ k.unfit }}</b> ({{ k.unfit_pct|pct }}) no son aptos para el servicio{% if k.no_evidence %} y {{ k.no_evidence }} no tienen evidencia técnica suficiente para concluir{% endif %}.</p>{% endif %}
+    <p>Quedan {{ k.pending }} sin auditar y {{ k.in_progress }} con informe en curso{% if k.no_serial %}; {{ k.no_serial }} no se pueden verificar porque la matriz no indica su serial{% endif %}. El Director ha firmado {{ k.signed }}.</p>
+  </section>
+
+  <section aria-labelledby="pt-kpi-t">
+    <h2 id="pt-kpi-t" class="sr-only">Indicadores de la auditoría</h2>
+    <div class="kpis">
+      <div class="kpi"><span class="kpi-n">{{ k.total }}</span><span class="kpi-l">Portátiles en la matriz</span><small>{{ k.with_serial }} con serial</small></div>
+      <div class="kpi is-accent"><span class="kpi-n">{{ k.issued }}</span><span class="kpi-l">Auditados</span><small>{{ k.coverage|pct }} de los que tienen serial</small></div>
+      <div class="kpi is-ok"><span class="kpi-n">{{ k.optimal }}</span><span class="kpi-l">Óptimos</span><small>Sin fallas funcionales</small></div>
+      <div class="kpi is-warn"><span class="kpi-n">{{ k.observed }}</span><span class="kpi-l">Con observaciones</span><small>Funcionan; requieren atención</small></div>
+      <div class="kpi is-danger"><span class="kpi-n">{{ k.unfit }}</span><span class="kpi-l">No aptos</span><small>Daño que impide el uso</small></div>
+      <div class="kpi"><span class="kpi-n">{{ k.pending }}</span><span class="kpi-l">Sin auditar</span><small>{{ k.in_progress }} más en auditoría</small></div>
+    </div>
+  </section>
+
+  <div class="exec-grid report-grid">
+    <section class="card" aria-labelledby="pt-dict-t">
+      <h2 id="pt-dict-t">Dictamen de los portátiles</h2>
+      {{ donut(a.verdicts, k.total, 'Distribución de los portátiles por dictamen', 'portátiles') }}
+    </section>
+    <section class="card" aria-labelledby="pt-comp-t">
+      <h2 id="pt-comp-t">Fallas por componente</h2>
+      {% if a.components %}{{ hbars(a.components) }}
+      <p class="small muted">Portátiles con al menos una falla moderada o crítica en cada componente. Un equipo puede contar en varios.</p>
+      {% else %}<p class="muted">No hay fallas funcionales registradas.</p>{% endif %}
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="pt-obs-t">
+    <h2 id="pt-obs-t">Observaciones destacadas <span class="count-pill">{{ a.highlights_total }}</span></h2>
+    {% if a.highlights %}
+    <ul class="highlights">
+      {% for i in a.highlights %}{% set f = i.verdict.findings[0] %}
+      <li>
+        <span class="badge badge-sev-{{ f.severity }}">{{ f.severity_label }}</span>
+        <div><b>{{ f.label }}</b> <span class="muted">· N.° {{ i.item_no }} · <code>{{ i.serial }}</code> · {{ report_code(i.report) }} · {{ i.report.owner_name }}</span>
+          <p>«{{ f.excerpt }}»</p></div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if a.highlights_total > a.highlights|length %}<p class="small muted">Se muestran las {{ a.highlights|length }} más graves de {{ a.highlights_total }}.</p>{% endif %}
+    {% else %}<p class="muted">Los informes cerrados no registran hallazgos.</p>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="pt-noapto-t">
+    <h2 id="pt-noapto-t">Portátiles no aptos <span class="count-pill">{{ a.unfit|length }}</span></h2>
+    {{ finding_table(a.unfit, 'Ningún portátil auditado tiene daños que impidan su uso.') }}
+  </section>
+
+  <section class="card" aria-labelledby="pt-conobs-t">
+    <h2 id="pt-conobs-t">Portátiles funcionales con observaciones <span class="count-pill">{{ a.observed|length }}</span></h2>
+    {{ finding_table(a.observed, 'Ningún portátil auditado tiene fallas por atender.') }}
+  </section>
+
+  <section class="card" aria-labelledby="pt-cat-t">
+    <h2 id="pt-cat-t">Resultados por contrato</h2>
+    {{ group_table(a.categories, 'Categoría') }}
+  </section>
+
+  <section class="card" aria-labelledby="pt-mod-t">
+    <h2 id="pt-mod-t">Resultados por marca y línea</h2>
+    {{ group_table(a.models, 'Marca y línea') }}
+  </section>
+
+  <section class="card" aria-labelledby="pt-tec-t">
+    <h2 id="pt-tec-t">Trabajo de los técnicos</h2>
+    {% if a.technicians %}
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="text">Técnico</th><th scope="col" data-sort="num">Con informe</th><th scope="col" data-sort="num">Auditados</th><th scope="col" data-sort="num">Firmados</th>
+          <th scope="col" data-sort="num">Óptimos</th><th scope="col" data-sort="num">Con observaciones</th><th scope="col" data-sort="num">No aptos</th></tr></thead>
+        <tbody>
+        {% for t in a.technicians %}
+          <tr>
+            <td data-label="Técnico">{{ t.name }}</td>
+            <td data-label="Con informe" data-v="{{ t.n }}">{{ t.n }}</td>
+            <td data-label="Auditados" data-v="{{ t.issued }}">{{ t.issued }}</td>
+            <td data-label="Firmados" data-v="{{ t.signed }}">{{ t.signed }}</td>
+            <td data-label="Óptimos" data-v="{{ t.optimal }}">{{ t.optimal }}</td>
+            <td data-label="Con observaciones" data-v="{{ t.observed }}">{{ t.observed }}</td>
+            <td data-label="No aptos" data-v="{{ t.unfit }}">{{ t.unfit }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<p class="muted">Aún no hay informes de portátiles de la matriz.</p>{% endif %}
+  </section>
+
+  <form class="card exec-filters" method="get" action="{{ url_for('dashboard.laptops') }}">
+    <div class="filters">
+      <div><label for="p-dict">Dictamen</label>
+        <select id="p-dict" name="dictamen"><option value="">Todos</option>
+          {% for code, label in opinions.items() %}<option value="{{ code }}" {% if code == opinion %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <div><label for="p-cat">Categoría</label>
+        <select id="p-cat" name="categoria"><option value="">Todas</option>
+          {% for c in a.categories %}<option value="{{ c.label }}" {% if c.label == category %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+        </select></div>
+      <div><label for="p-tec">Técnico</label>
+        <select id="p-tec" name="tecnico"><option value="">Todos</option>
+          {% for t in a.technicians %}<option value="{{ t.id }}" {% if t.id == owner_id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+        </select></div>
+      <div><label for="p-buscar">Buscar serial o características</label><input id="p-buscar" type="search" name="buscar" maxlength="60" value="{{ text }}"></div>
+      <div class="filter-actions"><button type="submit" class="btn btn-primary">Aplicar</button><a class="btn btn-ghost" href="{{ url_for('dashboard.laptops') }}">Limpiar</a></div>
+    </div>
+  </form>
+
+  <section class="card no-print" aria-labelledby="pt-det-t">
+    <h2 id="pt-det-t">Detalle por portátil <span class="count-pill">{{ rows|length }}</span></h2>
+    <p class="small muted">Los filtros acotan solo esta tabla; las cifras de arriba son siempre el total de la auditoría.</p>
+    <div class="table-wrap">
+      <table class="table table-dense" data-sortable>
+        <thead><tr><th scope="col" data-sort="num">N.°</th><th scope="col" data-sort="text">Serial</th><th scope="col" data-sort="text">Características</th><th scope="col" data-sort="text">Categoría</th><th scope="col" data-sort="text">Dictamen</th><th scope="col" data-sort="text">Informe</th><th scope="col" data-sort="text">Técnico</th></tr></thead>
+        <tbody>
+        {% for i in rows %}
+          <tr>
+            <td data-label="N.°" data-v="{{ i.item_no }}">{{ i.item_no }}</td>
+            <td data-label="Serial">{% if i.serial %}<code>{{ i.serial }}</code>{% else %}—{% endif %}</td>
+            <td data-label="Características" class="pre">{{ (i.characteristics or '—')|truncate(90) }}</td>
+            <td data-label="Categoría">{{ i.category or 'Sin categoría' }}</td>
+            <td data-label="Dictamen"><span class="badge badge-dict-{{ i.verdict.code|lower }}">{{ i.verdict.label }}</span></td>
+            <td data-label="Informe">{% if i.report %}{{ report_code(i.report) }}{% else %}—{% endif %}</td>
+            <td data-label="Técnico">{{ i.report.owner_name if i.report else '—' }}</td>
+          </tr>
+        {% else %}<tr><td colspan="7" class="muted">Ningún portátil coincide con los filtros.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="small muted">Fuente: {{ m.import.file_name }}, cargada el {{ m.import.imported_at|localdt }}, cruzada por número de serie con los informes no eliminados. El dictamen se basa en el Estado y en lo registrado por el técnico en el informe cerrado: «No apto» indica un daño que impide el uso o un equipo en reparación u obsoleto; lo estético se conserva como dato sin afectar la condición. Sin Estado o sin datos técnicos no se concluye. Los informes fuera de la matriz no se incluyen.</p>
+  {% elif not unavailable %}
+  <div class="notice" role="status">Aún no se ha cargado la matriz de inventario.</div>
+  {% endif %}
+</div>
+{% endblock %}
