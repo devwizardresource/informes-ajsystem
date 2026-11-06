@@ -10,7 +10,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, g, redirect, 
 
 from .. import audit, db, users
 from ..security import passwords, sessions
-from ..security.authz import login_required
+from ..security.authz import login_required, require_perm
 from ..security.client_info import current_client
 
 bp = Blueprint("auth", __name__)
@@ -154,7 +154,7 @@ def profile_signature_image():
 
 
 @bp.route("/cuenta/perfil/firma", methods=["POST"])
-@login_required
+@require_perm("report.edit_own")
 def profile_signature():
     upload = request.files.get("firma")
     try:

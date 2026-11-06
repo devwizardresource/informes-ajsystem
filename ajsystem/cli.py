@@ -59,7 +59,7 @@ def register_cli(app) -> None:
     @app.cli.command("create-user")
     @click.option("--username", required=True)
     @click.option("--full-name", required=True)
-    @click.option("--role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO"]), required=True)
+    @click.option("--role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO", "SUPERVISOR"]), required=True)
     @click.option("--id-number", default="", help="Número de identificación (también sirve para iniciar sesión)")
     def create_user(username, full_name, role, id_number):
         """Crea un usuario (pide la contraseña temporal de forma interactiva)."""
@@ -99,7 +99,7 @@ def register_cli(app) -> None:
         click.echo(f"Responsable inicial creado con id {uid}. Deberá cambiar la contraseña en su primer acceso.")
 
     @app.cli.command("set-role-name")
-    @click.argument("role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO"]))
+    @click.argument("role", type=click.Choice(["RESPONSABLE", "JEFE", "TECNICO", "SUPERVISOR"]))
     @click.argument("display_name")
     def set_role_name(role, display_name):
         """Cambia el nombre visible de un rol (p. ej. el del responsable administrativo)."""

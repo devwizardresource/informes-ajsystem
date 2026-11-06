@@ -126,6 +126,7 @@
 
     <section class="card">
       <h3>Cómo funciona</h3>
+      {% if has_perm('report.create') %}
       <ol class="small muted steps">
         <li>Cree un informe por equipo o importe una matriz Excel.</li>
         <li>Tome una foto clara de las características del equipo: el informe se autocompleta.</li>
@@ -133,6 +134,13 @@
         <li><b>Cerrar informe</b> es el último paso: lo bloquea y lo deja listo para la firma del Director.</li>
         <li>Si necesita corregirlo, reábralo indicando el motivo (si el Director ya lo firmó, solo él puede reabrirlo).</li>
       </ol>
+      {% else %}
+      <ol class="small muted steps">
+        <li>En el <b>Tablero</b> filtre por fechas y técnico para ver el avance del trabajo en campo.</li>
+        <li>En <b>Consolidación de informes</b> busque por técnico, marca, serie, estado o fecha.</li>
+        <li>Abra un informe para revisar su contenido, fotos y trazabilidad. Su perfil es de consulta: no modifica nada.</li>
+      </ol>
+      {% endif %}
     </section>
   </aside>
 </div>

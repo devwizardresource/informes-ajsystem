@@ -28,8 +28,9 @@ def index():
                 summary=service.summary(user),
                 recent_closed=service.recent_closed(user),
                 in_correction=service.in_correction(user),
-                requests=service.pending_requests(user),
             )
+        if has_perm("report.reopen") and has_perm("report.view_all"):
+            ctx["requests"] = service.pending_requests(user)
         if has_perm("home.activity"):
             # Solo la actividad propia: el filtro es el usuario de la sesión, nunca un parámetro.
             ctx["activity"] = analytics.activity_calendar(user["id"], current_app.config["AJS_SETTINGS"].timezone)

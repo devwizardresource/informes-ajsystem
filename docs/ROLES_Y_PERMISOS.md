@@ -9,33 +9,34 @@ Los permisos se guardan en MySQL (`roles`, `permissions`, `role_permissions`) y 
 | `RESPONSABLE` | «Director» (desde la migración 0007) | Propietario funcional. Todos los permisos; firma los informes cerrados y consulta el tablero ejecutivo |
 | `JEFE` | «Jefe» | Igual que el responsable, salvo la gestión de usuarios |
 | `TECNICO` | «Técnico» | Inicio y Creación de informe; solo ve, edita, cierra y reabre **sus propios** informes (migración 0008) |
+| `SUPERVISOR` | «Supervisor» | Solo consulta: filtra el Tablero y la Consolidación y abre los informes de todos los técnicos para supervisar la auditoría. No modifica nada (migración 0011) |
 
 El nombre visible se cambia sin tocar el código, desde **Usuarios → Nombres visibles** o con `flask --app wsgi set-role-name RESPONSABLE "Nuevo nombre"`. Ambas vías quedan auditadas.
 
 ## Matriz
 
-| Permiso | Responsable | Jefe | Técnico |
-|---|:-:|:-:|:-:|
-| `module.home` · Inicio | ✔ | ✔ | ✔ |
-| `module.reports` · Creación de informe | ✔ | ✔ | ✔ |
-| `module.consolidation` · Consolidación | ✔ | ✔ | ✘ |
-| `module.audit_log` · Registro detallado | ✔ | ✔ | ✘ |
-| `report.create` | ✔ | ✔ | ✔ |
-| `report.edit_own` · editar y cerrar los propios | ✔ | ✔ | ✔ |
-| `report.view_sent` · ver informes enviados por otros (heredado) | ✔ | ✔ | ✘ |
-| `report.view_all` · ver **todos** los informes | ✔ | ✔ | ✘ |
-| `report.request_reopen` · flujo anterior de solicitud (sin perfiles asignados) | ✘ | ✘ | ✘ |
-| `report.import` · crear informes desde una matriz Excel/CSV | ✔ | ✔ | ✔ |
-| `report.edit_any` · editar y cerrar informes de otros | ✔ | ✔ | ✘ |
-| `report.reopen` · reabrir con motivo un informe cerrado visible (firmado: solo el Director) | ✔ | ✔ | ✔ (los propios) |
-| `report.download` | ✔ | ✔ | ✘ |
-| `audit.read` / `audit.verify` · incluye **Entradas y salidas de sesión** (usuario, entrada, salida, IP, sistema operativo) | ✔ | ✔ | ✘ |
-| `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ |
-| `users.manage` · incluye **eliminar usuarios** (eliminación lógica) | ✔ | ✘ | ✘ |
-| `report.sign_closed` · firmar como quien recibe / aprueba un informe **cerrado** | ✔ | ✘ | ✘ |
-| `dashboard.view` · **consultar y filtrar** el Tablero: rendimiento (`/tablero`) y Convalidación (`/tablero/convalidacion`), sin modificar nada (migración 0010). La Auditoría de portátiles (`/tablero/portatiles`) exige además `report.view_all`: el técnico no la ve | ✔ | ✔ | ✔ |
-| `dashboard.executive` · **administrar el tablero**: cargar la matriz de inventario | ✔ | ✘ | ✘ |
-| `home.activity` · panel «Mi actividad» en Inicio (solo los informes propios) | ✘ | ✘ | ✔ |
+| Permiso | Responsable | Jefe | Técnico | Supervisor |
+|---|:-:|:-:|:-:|:-:|
+| `module.home` · Inicio | ✔ | ✔ | ✔ | ✔ |
+| `module.reports` · Creación de informe | ✔ | ✔ | ✔ | ✘ |
+| `module.consolidation` · Consolidación | ✔ | ✔ | ✘ | ✔ |
+| `module.audit_log` · Registro detallado | ✔ | ✔ | ✘ | ✘ |
+| `report.create` | ✔ | ✔ | ✔ | ✘ |
+| `report.edit_own` · editar y cerrar los propios | ✔ | ✔ | ✔ | ✘ |
+| `report.view_sent` · ver informes enviados por otros (heredado) | ✔ | ✔ | ✘ | ✘ |
+| `report.view_all` · ver **todos** los informes | ✔ | ✔ | ✘ | ✔ |
+| `report.request_reopen` · flujo anterior de solicitud (sin perfiles asignados) | ✘ | ✘ | ✘ | ✘ |
+| `report.import` · crear informes desde una matriz Excel/CSV | ✔ | ✔ | ✔ | ✘ |
+| `report.edit_any` · editar y cerrar informes de otros | ✔ | ✔ | ✘ | ✘ |
+| `report.reopen` · reabrir con motivo un informe cerrado visible (firmado: solo el Director) | ✔ | ✔ | ✔ (los propios) | ✘ |
+| `report.download` | ✔ | ✔ | ✘ | ✔ |
+| `audit.read` / `audit.verify` · incluye **Entradas y salidas de sesión** (usuario, entrada, salida, IP, sistema operativo) | ✔ | ✔ | ✘ | ✘ |
+| `report.delete` · eliminar y restaurar informes (con motivo, auditado) | ✔ | ✘ | ✘ | ✘ |
+| `users.manage` · incluye **eliminar usuarios** (eliminación lógica) | ✔ | ✘ | ✘ | ✘ |
+| `report.sign_closed` · firmar como quien recibe / aprueba un informe **cerrado** | ✔ | ✘ | ✘ | ✘ |
+| `dashboard.view` · **consultar y filtrar** el Tablero: rendimiento (`/tablero`) y Convalidación (`/tablero/convalidacion`), sin modificar nada (migración 0010). La Auditoría de portátiles (`/tablero/portatiles`) exige además `report.view_all`: el técnico no la ve | ✔ | ✔ | ✔ | ✔ |
+| `dashboard.executive` · **administrar el tablero**: cargar la matriz de inventario | ✔ | ✘ | ✘ | ✘ |
+| `home.activity` · panel «Mi actividad» en Inicio (solo los informes propios) | ✘ | ✘ | ✔ | ✘ |
 
 Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la ruta y la cuenta de base de datos de la aplicación carece de `UPDATE`/`DELETE` sobre esas tablas.
 
@@ -44,6 +45,7 @@ Ningún perfil puede modificar ni eliminar registros de auditoría: no existe la
 - **Visibilidad** (se aplica en el `WHERE` de todas las consultas):
   - Director y jefe: **todos** (`report.view_all`).
   - Técnico: **solo los propios** (desde la migración 0008, 2026-10-28).
+  - Supervisor: **todos**, en solo lectura (`report.view_all`).
 - El **Tablero** muestra cifras y observaciones de todos los equipos a quien tenga `dashboard.view`, pero sus enlaces solo llevan a informes que el usuario puede abrir: el técnico ve los códigos ajenos sin enlace.
 - Un informe ajeno o no visible responde **404** (no revela si existe) y queda registrado como `ACCESO_DENEGADO`.
 - La **edición** solo es posible en estado EN_ELABORACION o REABIERTO; el técnico edita los suyos y la dirección cualquiera (`report.edit_any`).
@@ -76,6 +78,17 @@ Al cerrarse, un informe aparece en **Inicio → Informes cerrados pendientes de 
 
 - **Mi actividad** (técnico, en Inicio): calendario de 53 semanas con los informes que el propio técnico creó cada día. La consulta se filtra por el usuario de la sesión; no admite parámetros.
 - **Tablero ejecutivo** (`/tablero`, solo Director): KPI, informes por día y por técnico, ranking, estados, inventario (estado del equipo, dispositivo, marca) y tablas de equipos en mal estado, con observaciones y con fotografías, con filtros de fechas y técnico. Es de solo lectura. Los equipos se cuentan una vez (marca + número de serie, con su informe más reciente del periodo); «Sin dato» indica un campo no diligenciado y «Sin datos» un promedio sin base, distinto de un cero real. Los informes eliminados no cuentan.
+
+## Supervisor (solo consulta)
+
+El Director crea la cuenta en **Usuarios** eligiendo el rol «Supervisor», o con `flask --app wsgi create-user --role SUPERVISOR`. El Supervisor:
+
+- Consulta y filtra el **Tablero** (rendimiento por fechas y técnico, Convalidación y Auditoría de portátiles) y la **Consolidación** (técnico, marca, serie, estado y fechas).
+- Abre cualquier informe con sus fotos y trazabilidad, sin controles de edición.
+- Descarga el PDF y exporta a Excel: no cambia ningún dato y cada descarga queda en la auditoría (`INFORME_DESCARGADO`, `INFORMES_EXPORTADOS`).
+- **No** crea, edita, cierra, reabre, firma ni elimina informes, no carga la matriz, no gestiona usuarios y no entra al Registro detallado (IP y sesiones de las personas). Solo cambia su propia contraseña.
+
+No tiene `report.edit_own`: un técnico que pase a Supervisor deja de poder editar sus propios informes, y tampoco carga firma en **Mi perfil** (esa ruta exige ese permiso, porque la firma del perfil se muestra y se copia en los informes de su dueño). `tests/test_supervisor.py` envía un POST a cada ruta de la aplicación con este rol y comprueba que la base no cambia.
 
 ## Eliminación de informes (Director)
 

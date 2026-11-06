@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-head"><h1>Mi perfil</h1><a class="btn btn-ghost" href="{{ url_for('auth.change_password') }}">Cambiar contraseña</a></div>
 
+{% if has_perm('report.edit_own') %}
 <section class="card profile-card">
   <div>
     <h2>Firma digital</h2>
@@ -25,4 +26,7 @@
     {% endif %}
   </div>
 </section>
+{% else %}
+<p class="notice">Su perfil es de consulta: no elabora ni firma informes, así que no necesita firma digital.</p>
+{% endif %}
 {% endblock %}

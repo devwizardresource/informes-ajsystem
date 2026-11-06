@@ -1,4 +1,4 @@
-"""Módulo 3 · Consolidación de informes (Director y jefe; los técnicos no tienen acceso)."""
+"""Módulo 3 · Consolidación de informes (Director, jefe y supervisor; los técnicos no tienen acceso)."""
 from __future__ import annotations
 
 import datetime as dt

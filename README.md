@@ -100,7 +100,7 @@ ajsystem/                 Paquete de la aplicación
   document_templates/     PDF: aj_v1.html (+ assets/ logo y fuentes)
 resources/                Plantilla del informe entregada por el propietario (fuente única del formato)
 hostinger/, server.js     Arranque en Hostinger: integridad, Python verificado por hash, proxy a gunicorn
-migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura, 0004 eliminación, 0005 perfiles/invitaciones/permisos, 0009 matriz de inventario)
+migrations/               SQL versionado (0001 esquema, 0002 datos base, 0003 plantilla/adjuntos/reapertura, 0004 eliminación, 0005 perfiles/invitaciones/permisos, 0009 matriz de inventario, 0011 rol Supervisor)
 sql/grants_app.sql        Privilegios mínimos de la cuenta de la aplicación
 scripts/                  backup.py, restore.py, security_audit.sh, vendor-audit/, docker-mysql-tool.sh (desarrollo)
 .github/                  CI (auditoría + pruebas MySQL/MariaDB) y Dependabot
